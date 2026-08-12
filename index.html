@@ -107,7 +107,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
 <body>
 <nav class="topnav">
  <div class="d-flex align-items-center flex-wrap">
-  <div class="brand"><svg width="28" height="28" viewBox="0 0 100 100" style="margin-left:4px"><rect fill="#d4a017" width="100" height="100" rx="18"/><text x="50" y="68" text-anchor="middle" font-size="48" font-weight="bold" fill="#0f2b46">OM</text></svg> Omara Manager</div>
+  <div class="brand"><img src="icon-192.png" alt="OM" width="28" height="28" style="margin-left:4px;border-radius:6px"> Omara Manager</div>
   <div class="tnav flex-grow-1">
    <button class="tbtn active" onclick="ST('dash')"><i class="fas fa-home"></i> الرئيسية</button>
    <button class="tbtn" onclick="ST('sokan')"><i class="fas fa-users"></i> السكان</button>
@@ -837,19 +837,42 @@ function getOrCreateFolder(name) {
     <div class="mb-2">
       <label class="form-label fw-bold">حالة البوت</label>
       <div id="tgBotStatus" class="alert alert-info py-2 small">جاري التحقق...</div>
+      <div id="tgBotUsername" style="display:none"></div>
     </div>
     <div class="d-flex gap-2 flex-wrap mb-2">
       <button class="btn btn-sm" style="background:#0088cc;color:#fff" onclick="checkTgBot()"><i class="fab fa-telegram me-1"></i> تحقق من البوت</button>
-      <button class="btn btn-sm btn-ok" onclick="tgSendToAll()"><i class="fas fa-paper-plane me-1"></i> إرسال رسالة لكل السكان</button>
+      <button class="btn btn-sm btn-ok" onclick="tgSendTestMsg()"><i class="fas fa-vial me-1"></i> إرسال رسالة تجريبية</button>
       <button class="btn btn-sm btn-p" onclick="tgCheckUpdates()"><i class="fas fa-sync me-1"></i> تحديث ربط السكان</button>
     </div>
+    <hr>
+    <!-- إرسال لكل السكان أو ساكن محدد -->
     <div class="mb-2">
-      <label class="form-label">رسالة جماعية للسكان عبر تليجرام</label>
-      <textarea class="form-control" id="tgBroadcast" rows="2" placeholder="اكتب رسالة لإرسالها لجميع السكان المربوطين بالبوت..."></textarea>
+      <label class="form-label fw-bold"><i class="fas fa-paper-plane me-1"></i> إرسال رسالة تليجرام</label>
+      <select class="form-select form-select-sm mb-2" id="tgSendTarget">
+        <option value="all">📢 كل السكان المربوطين</option>
+        <option value="status_all">📊 إرسال كشف حساب لكل السكان</option>
+      </select>
+      <textarea class="form-control" id="tgBroadcast" rows="2" placeholder="اكتب رسالة لإرسالها..."></textarea>
     </div>
-    <button class="btn w-100" style="background:#0088cc;color:#fff" onclick="tgBroadcastSend()"><i class="fab fa-telegram me-1"></i> إرسال الرسالة الجماعية</button>
-    <div class="alert alert-info py-2 small mt-2"><i class="fas fa-lightbulb me-1"></i> السكان اللي أرقامهم مسجلة هيتبعتلهم رسالة واتساب فيها لينك البوت. أي ساكن يفتح اللينك ويضغط Start هيترتبط تلقائياً بحسابه.</div>
-    <button class="btn btn-wa w-100 mt-1" onclick="tgSendBotLinkWA()"><i class="fab fa-whatsapp me-1"></i> أرسل لينك البوت لكل السكان عبر واتساب</button>
+    <button class="btn w-100" style="background:#0088cc;color:#fff" onclick="tgSmartSend()"><i class="fab fa-telegram me-1"></i> إرسال</button>
+    <hr>
+    <!-- ربط السكان -->
+    <div class="mb-2">
+      <label class="form-label fw-bold"><i class="fas fa-link me-1"></i> ربط السكان بالبوت</label>
+      <div id="tgLinkedCount" class="small text-muted mb-1"></div>
+      <div class="alert alert-light py-2 small border">
+        <strong>طريقة الربط:</strong><br>
+        1. ابعت للساكن لينك البوت عبر واتساب (الزر تحت)<br>
+        2. الساكن يضغط Start في تليجرام ويتربط تلقائياً<br>
+        3. لو فعّلت الـ Webhook مش لازم البرنامج يكون مفتوح
+      </div>
+      <div class="mb-2">
+        <label class="form-label fw-bold"><i class="fas fa-user-shield me-1"></i> ربط حساب الأدمن بالبوت</label>
+        <div id="adminTgStatus" class="small text-muted mb-1"></div>
+        <button class="btn btn-sm btn-outline-primary" onclick="tgLinkAdmin()"><i class="fab fa-telegram me-1"></i> ربط حسابي كأدمن</button>
+      </div>
+    </div>
+    <button class="btn btn-wa w-100" onclick="tgSendBotLinkWA()"><i class="fab fa-whatsapp me-1"></i> أرسل لينك البوت لكل السكان عبر واتساب</button>
    </div>
    <div class="sc">
     <div class="stitle"><i class="fas fa-info-circle"></i> معلومات النظام</div>
@@ -1036,7 +1059,7 @@ function getOrCreateFolder(name) {
 <div id="authGate" style="position:fixed;inset:0;background:#f0f4f8;z-index:99999;display:flex;align-items:center;justify-content:center;direction:rtl;">
   <div style="background:#fff;padding:28px;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);width:92%;max-width:360px;">
     <div class="text-center mb-3">
-      <svg width="56" height="56" viewBox="0 0 100 100"><rect fill="#d4a017" width="100" height="100" rx="18"/><text x="50" y="68" text-anchor="middle" font-size="48" font-weight="bold" fill="#0f2b46">OM</text></svg>
+      <img src="icon-192.png" alt="Omara Manager" width="80" height="80" style="border-radius:16px">
       <h5 class="fw-bold mt-2 mb-0" style="color:#0f2b46">Omara Manager</h5>
       <div class="text-muted small">نظام إدارة اتحاد الملاك</div>
     </div>
@@ -1611,7 +1634,16 @@ function rSokan(){
         ? `<div class="ditem" style="background:#ecfdf5;border-color:#a7f3d0"><div><i class="fas fa-check-circle text-success me-1"></i><span class="text-success">${d.desc||'—'} — مسدد بالكامل (${d.paidAmount||0} ج.م)${d.paidByAdvance?' <span class=\"badge bg-primary\" style=\"font-size:.6rem\">من الرصيد المقدم</span>':''}</span></div><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'monthly')" title="حذف هذا السطر"><i class="fas fa-trash"></i></button></div>`
         : `<div class="ditem"><div><i class="fas fa-calendar-times text-danger me-1"></i>${d.desc||'—'} — <strong>${Math.round(parseFloat(d.amount))} ج.م</strong></div><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'monthly')" title="حذف / إعفاء من هذا الشهر"><i class="fas fa-trash"></i></button></div>`
     ) : []),
-    ...(r.manualDebts&&r.manualDebts.length ? r.manualDebts.map((d,di)=>`<div class="ditem" style="background:#fff8e1;border-color:#fde68a" ondblclick="openEditDebt(${i},${di})" title="انقر مرتين للتعديل"><div><i class="fas fa-exclamation-triangle text-warning me-1"></i><span class="badge bg-warning text-dark me-1" style="font-size:.65rem">يدوي</span>${d.desc||'—'} — <strong>${Math.round(parseFloat(d.amount))} ج.م</strong><span class="text-muted ms-1" style="font-size:.68rem">(${d.addedDate||''})</span></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-warning py-0 px-1" onclick="event.stopPropagation();openEditDebt(${i},${di})" title="تعديل"><i class="fas fa-pencil-alt"></i></button><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'manual')" title="حذف هذه المتأخرة اليدوية"><i class="fas fa-trash"></i></button></div></div>`) : [])
+    ...(r.manualDebts&&r.manualDebts.length ? r.manualDebts.map((d,di)=>{
+        const da = parseFloat(d.amount);
+        const orig = d.originalAmount || da;
+        if(da <= 0 && d.paidByAdvance) {
+            return `<div class="ditem" style="background:#ecfdf5;border-color:#a7f3d0"><div><i class="fas fa-check-circle text-success me-1"></i><span class="badge bg-warning text-dark me-1" style="font-size:.65rem">يدوي</span>${d.desc||'—'} — مسدد بالكامل من الرصيد المقدم (${Math.round(orig)} ج.م) <span class="badge bg-primary" style="font-size:.6rem">من الرصيد المقدم</span></div><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'manual')"><i class="fas fa-trash"></i></button></div>`;
+        } else if(da < orig && d.paidByAdvance) {
+            return `<div class="ditem" style="background:#fff8e1;border-color:#fde68a"><div><i class="fas fa-exclamation-triangle text-warning me-1"></i><span class="badge bg-warning text-dark me-1" style="font-size:.65rem">يدوي</span>${d.desc||'—'} — <strong>${Math.round(da)} ج.م</strong> (أصل: ${Math.round(orig)}، خُصم ${Math.round(orig-da)} من المقدم)<span class="text-muted ms-1" style="font-size:.68rem">(${d.addedDate||''})</span></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-warning py-0 px-1" onclick="event.stopPropagation();openEditDebt(${i},${di})"><i class="fas fa-pencil-alt"></i></button><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'manual')"><i class="fas fa-trash"></i></button></div></div>`;
+        }
+        return `<div class="ditem" style="background:#fff8e1;border-color:#fde68a" ondblclick="openEditDebt(${i},${di})" title="انقر مرتين للتعديل"><div><i class="fas fa-exclamation-triangle text-warning me-1"></i><span class="badge bg-warning text-dark me-1" style="font-size:.65rem">يدوي</span>${d.desc||'—'} — <strong>${Math.round(da)} ج.م</strong><span class="text-muted ms-1" style="font-size:.68rem">(${d.addedDate||''})</span></div><div class="d-flex gap-1"><button class="btn btn-sm btn-outline-warning py-0 px-1" onclick="event.stopPropagation();openEditDebt(${i},${di})" title="تعديل"><i class="fas fa-pencil-alt"></i></button><button class="btn btn-sm btn-rd" onclick="rmDebt(${i},${di},'manual')" title="حذف هذه المتأخرة اليدوية"><i class="fas fa-trash"></i></button></div></div>`;
+    }) : [])
   ].join('');
   const ph=(r.payments&&r.payments.length)?r.payments.map((p,pi)=>{
     const methIcon={'نقدي':'💵','انستاباي':'📱','فودافون كاش':'📲','تحويل بنكي':'🏦','شيك':'📄'};
@@ -1644,6 +1676,7 @@ function rSokan(){
           <button class="btn btn-sm btn-wa act-btn" onclick="sendWA(${i})" title="إرسال رسالة تذكير سريعة بالمتأخرات عبر الواتساب"><i class="fab fa-whatsapp"></i></button>
           <button class="btn btn-sm btn-p act-btn" onclick="openER(${i})" title="تعديل بيانات الساكن والوحدات والإعفاءات"><i class="fas fa-edit"></i></button>
           <button class="btn btn-sm act-btn" style="background:#6366f1;color:#fff" onclick="openShr(${i})" title="توليد رابط كشف الحساب الآمن والمستقل لهذا الساكن"><i class="fas fa-share-alt"></i></button>
+          ${r.telegramChatId?`<button class="btn btn-sm act-btn" style="background:#0088cc;color:#fff" onclick="tgSendToResident(${i},'حالة حسابك:\\n'+rDueSummary(D.sokan[${i}]))" title="إرسال كشف حساب تليجرام"><i class="fab fa-telegram"></i></button>`:`<button class="btn btn-sm act-btn btn-outline-secondary" onclick="tgLinkResident(${i})" title="ربط الساكن بتليجرام"><i class="fab fa-telegram"></i></button>`}
           <button class="btn btn-sm btn-rd act-btn" onclick="rmRes(${i})" title="حذف الساكن نهائياً"><i class="fas fa-trash"></i></button>
         </div>
       </div>
@@ -2174,10 +2207,17 @@ function recalculateAll(){
     });
     
     // 2. Wipe out auto-generated monthly debts to prevent duplicates while preserving manual debts
+    //    *** مهم: إعادة المتأخرات اليدوية لقيمتها الأصلية قبل إعادة الحساب ***
     D.sokan.forEach(r => {
         r.debts = (r.debts || []).filter(d => !d.isMonthlyDue);
         r.advance = 0;
-        if(!r.manualDebts) r.manualDebts = []; // ensure the manual array always exists — never cleared
+        if(!r.manualDebts) r.manualDebts = [];
+        // استعادة المبالغ الأصلية للمتأخرات اليدوية اللي ممكن تكون اتخصمت في حساب سابق
+        r.manualDebts.forEach(d => {
+            if(d.originalAmount === undefined) d.originalAmount = parseFloat(d.amount) || 0;
+            d.amount = d.originalAmount;
+            d.paidByAdvance = false;
+        });
     });
     
     // 3. Chronologically calculate distributions and add as debts
@@ -2284,7 +2324,7 @@ function recalculateAll(){
         // 4b. Advance carry-over: apply accumulated advance to monthly dues AND manual debts
         if(r.advance > 0){
             let rem = r.advance;
-            // أولاً: تطبيق الرصيد المقدم على المستحقات الشهرية
+            // أولاً: المستحقات الشهرية
             if(r.debts && r.debts.length > 0){
                 const monthlyOnly = r.debts.filter(d=>d.isMonthlyDue);
                 for(let i=0; i<monthlyOnly.length && rem>0; i++){
@@ -2296,16 +2336,15 @@ function recalculateAll(){
                 }
                 r.debts = r.debts.filter(d => parseFloat(d.amount) > 0.01 || d.isExemptEntry || d.isPaidEntry);
             }
-            // ثانياً: تطبيق الفائض على المتأخرات اليدوية
+            // ثانياً: المتأخرات اليدوية — نعدل amount بس نحتفظ بالعنصر وبـ originalAmount
             if(rem > 0.01 && r.manualDebts && r.manualDebts.length > 0){
                 for(let i=0; i<r.manualDebts.length && rem>0; i++){
                     const d = r.manualDebts[i];
                     const da = parseFloat(d.amount);
                     if(da <= 0) continue;
-                    if(rem >= da){ rem -= da; d.amount = 0; }
-                    else { d.amount = da - rem; rem = 0; }
+                    if(rem >= da){ rem -= da; d.amount = 0; d.paidByAdvance = true; }
+                    else { d.amount = da - rem; d.paidByAdvance = true; rem = 0; }
                 }
-                r.manualDebts = r.manualDebts.filter(d => parseFloat(d.amount) > 0.01);
             }
             r.advance = rem;
         }
@@ -3860,19 +3899,148 @@ async function tgApiCall(method, params = {}) {
     }
 }
 
+let _tgBotUsername = '';
+
 async function checkTgBot() {
     const el = document.getElementById('tgBotStatus');
     el.className = 'alert alert-info py-2 small';
     el.textContent = 'جاري التحقق من البوت...';
     const res = await tgApiCall('getMe');
     if(res.ok) {
+        _tgBotUsername = res.result.username;
+        document.getElementById('tgBotUsername').textContent = _tgBotUsername;
         el.className = 'alert alert-success py-2 small';
-        el.innerHTML = `<i class="fab fa-telegram me-1"></i> البوت متصل: <strong>@${res.result.username}</strong> — ${res.result.first_name}`;
-        // Start polling for updates
+        el.innerHTML = `<i class="fab fa-telegram me-1"></i> البوت متصل: <strong>@${_tgBotUsername}</strong> — ${res.result.first_name}`;
+        // Set Arabic bot commands
+        tgApiCall('setMyCommands', {commands: [
+            {command:'start', description:'بدء استخدام البوت وربط حسابك'},
+            {command:'status', description:'عرض حالة حسابك والمتأخرات'},
+            {command:'months', description:'تفاصيل المصاريف الشهرية'},
+            {command:'report', description:'إبلاغ عن عطل'},
+            {command:'emergency', description:'أرقام الطوارئ'}
+        ], language_code: 'ar'});
+        // Also set as default commands
+        tgApiCall('setMyCommands', {commands: [
+            {command:'start', description:'بدء استخدام البوت وربط حسابك'},
+            {command:'status', description:'عرض حالة حسابك والمتأخرات'},
+            {command:'months', description:'تفاصيل المصاريف الشهرية'},
+            {command:'report', description:'إبلاغ عن عطل'},
+            {command:'emergency', description:'أرقام الطوارئ'}
+        ]});
         tgStartPolling();
+        tgUpdateUI();
     } else {
         el.className = 'alert alert-danger py-2 small';
         el.textContent = 'خطأ في الاتصال بالبوت: ' + (res.description || 'تحقق من مفتاح API');
+    }
+}
+
+function tgUpdateUI() {
+    // Update send target dropdown with individual residents
+    const sel = document.getElementById('tgSendTarget');
+    if(!sel) return;
+    // Keep first two options, remove the rest
+    while(sel.options.length > 2) sel.remove(2);
+    const connected = D.sokan.filter(r => r.telegramChatId);
+    if(connected.length) {
+        const sep = document.createElement('option');
+        sep.disabled = true; sep.textContent = '── ساكن محدد ──';
+        sel.appendChild(sep);
+        connected.forEach((r, i) => {
+            const opt = document.createElement('option');
+            opt.value = 'resident_' + D.sokan.indexOf(r);
+            opt.textContent = `👤 ${r.name}`;
+            sel.appendChild(opt);
+        });
+    }
+    // Update linked count
+    const countEl = document.getElementById('tgLinkedCount');
+    if(countEl) {
+        const linked = D.sokan.filter(r => r.telegramChatId).length;
+        countEl.innerHTML = `<i class="fab fa-telegram me-1" style="color:#0088cc"></i> ${linked} من ${D.sokan.length} ساكن مربوط بالبوت`;
+    }
+    tgUpdateAdminStatus();
+}
+
+async function tgSmartSend() {
+    const target = document.getElementById('tgSendTarget').value;
+    if(target === 'status_all') {
+        return tgSendToAll();
+    }
+    if(target === 'all') {
+        return tgBroadcastSend();
+    }
+    if(target.startsWith('resident_')) {
+        const idx = parseInt(target.replace('resident_', ''));
+        const msg = document.getElementById('tgBroadcast').value.trim();
+        if(!msg) return T('اكتب رسالة أولاً','e');
+        const r = D.sokan[idx];
+        if(!r || !r.telegramChatId) return T('الساكن غير مربوط بتليجرام','e');
+        const res = await tgApiCall('sendMessage', {chat_id: r.telegramChatId, text: `📩 رسالة من إدارة العمارة:\n\n${msg}`});
+        if(res.ok) {
+            T(`✅ تم إرسال الرسالة إلى ${r.name}`,'s');
+            document.getElementById('tgBroadcast').value = '';
+        } else {
+            T('❌ فشل الإرسال: ' + (res.description||''),'e');
+        }
+    }
+}
+
+function rDueSummary(r) {
+    let s = '';
+    (r.debts||[]).forEach(d => {
+        if(parseFloat(d.amount) > 0 && !d.isPaidEntry && !d.isExemptEntry) s += `• ${d.desc}: ${Math.round(parseFloat(d.amount))} ج.م\n`;
+    });
+    (r.manualDebts||[]).forEach(d => {
+        if(parseFloat(d.amount) > 0) s += `• ${d.desc} (يدوي): ${Math.round(parseFloat(d.amount))} ج.م\n`;
+    });
+    const adv = r.advance || 0;
+    if(adv > 0) s += `✅ رصيد مقدم: ${Math.round(adv)} ج.م`;
+    return s || '✅ حسابك مسدد بالكامل';
+}
+
+function tgLinkResident(idx) {
+    const r = D.sokan[idx];
+    if(!r) return;
+    const botName = _tgBotUsername || 'OmaraManagerBot';
+    const link = `https://t.me/${botName}?start=${r.id}`;
+    const ph = fmtPhone(r.phone);
+    if(ph) {
+        const msg = `السلام عليكم الأستاذ/ ${r.name}\n\nلربط حسابك ببوت إدارة العمارة على تليجرام اضغط الرابط:\n${link}`;
+        window.open(`https://wa.me/${ph}?text=${encodeURIComponent(msg)}`, '_blank');
+        T('تم فتح واتساب لإرسال لينك الربط — بعد ما الساكن يضغط Start ارجع هنا واضغط تحديث ربط السكان','s');
+    } else {
+        // Copy link to clipboard
+        navigator.clipboard.writeText(link).then(() => T(`تم نسخ رابط الربط — ابعته للساكن: ${link}`,'s')).catch(() => {
+            prompt('انسخ الرابط ده وابعته للساكن:', link);
+        });
+    }
+}
+
+async function tgSendTestMsg() {
+    const connected = D.sokan.filter(r => r.telegramChatId);
+    if(!connected.length) return T('لا يوجد سكان مربوطين بالبوت — اربط ساكن أولاً','e');
+    const first = connected[0];
+    const res = await tgApiCall('sendMessage', {chat_id: first.telegramChatId, text: '🔔 رسالة تجريبية من Omara Manager\n\nلو وصلتك الرسالة دي يبقى البوت شغال تمام! ✅'});
+    if(res.ok) T(`✅ تم إرسال رسالة تجريبية إلى ${first.name}`,'s');
+    else T('❌ فشل الإرسال: ' + (res.description||''),'e');
+}
+
+// Admin Telegram linking
+async function tgLinkAdmin() {
+    const botName = _tgBotUsername || 'OmaraManagerBot';
+    const link = `https://t.me/${botName}?start=ADMIN_LINK`;
+    window.open(link, '_blank');
+    T('اضغط Start في تليجرام ثم ارجع هنا واضغط "تحديث ربط السكان"', 'i');
+}
+
+function tgUpdateAdminStatus() {
+    const el = document.getElementById('adminTgStatus');
+    if(!el) return;
+    if(D.adminTelegramChatId) {
+        el.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i> حسابك مربوط كأدمن — ستصلك إشعارات البلاغات</span>';
+    } else {
+        el.innerHTML = '<span class="text-muted">غير مربوط — اربط حسابك لاستقبال إشعارات البلاغات والأعطال</span>';
     }
 }
 
@@ -3889,14 +4057,49 @@ async function tgCheckUpdates() {
     res.result.forEach(upd => {
         _tgOffset = upd.update_id + 1;
         const msg = upd.message;
-        if(!msg || !msg.text) return;
+        if(!msg) return;
         const chatId = msg.chat.id;
-        const text = msg.text.trim();
+        const text = (msg.text || '').trim();
+
+        // Handle photo messages (fault reports with photos)
+        if(msg.photo && msg.photo.length > 0) {
+            const photoReporter = D.sokan.find(s => s.telegramChatId === chatId);
+            if(photoReporter) {
+                const caption = msg.caption || 'صورة مرفقة';
+                const photoFileId = msg.photo[msg.photo.length - 1].file_id;
+                if(!D.sianaLog) D.sianaLog = [];
+                D.sianaLog.push({
+                    desc: `بلاغ مصور من ${photoReporter.name}: ${caption}`,
+                    amount: 0,
+                    date: new Date().toISOString().split('T')[0],
+                    type: 'report',
+                    reportedBy: photoReporter.name,
+                    telegramReport: true,
+                    photoFileId: photoFileId
+                });
+                SD(D);
+                tgApiCall('sendMessage', {chat_id: chatId, text: '✅ تم تسجيل البلاغ والصورة بنجاح. شكراً لتعاونكم!'});
+                T(`📩 بلاغ مصور من ${photoReporter.name}: ${caption}`, 'i');
+                // Forward to admin
+                if(D.adminTelegramChatId) {
+                    tgApiCall('forwardMessage', {chat_id: D.adminTelegramChatId, from_chat_id: chatId, message_id: msg.message_id});
+                    tgApiCall('sendMessage', {chat_id: D.adminTelegramChatId, text: `🔔 بلاغ مصور من ${photoReporter.name}: ${caption}`});
+                }
+            }
+            if(!text) return;
+        }
 
         // /start command with phone or resident id
         if(text.startsWith('/start')) {
             const parts = text.split(' ');
             const param = parts[1] || '';
+            // Admin linking
+            if(param === 'ADMIN_LINK') {
+                D.adminTelegramChatId = chatId;
+                linked++;
+                tgApiCall('sendMessage', {chat_id: chatId, text: '✅ تم ربط حسابك كأدمن بنجاح!\n\nستصلك إشعارات البلاغات والأعطال من السكان.'});
+                return;
+            }
             // Try to match by phone number or resident id
             let found = null;
             if(param) {
@@ -4023,6 +4226,10 @@ async function tgCheckUpdates() {
                     text: '✅ تم تسجيل البلاغ بنجاح وسيتم إبلاغ إدارة العمارة. شكراً لتعاونكم!'
                 });
                 T(`📩 بلاغ جديد من ${r.name} عبر تليجرام: ${text.substring(0,50)}...`, 'i');
+                // Forward to admin via Telegram
+                if(D.adminTelegramChatId) {
+                    tgApiCall('sendMessage', {chat_id: D.adminTelegramChatId, text: `🔔 بلاغ جديد من ${r.name}:\n\n${text}`});
+                }
             }
         }
 
@@ -4126,7 +4333,8 @@ function tgSendBotLinkWA() {
     const ph = fmtPhone(first.phone);
     if(!ph) return T('رقم واتساب غير صالح','e');
 
-    const botLink = `https://t.me/OmaraManagerBot?start=${first.id}`;
+    const botName = _tgBotUsername || 'OmaraManagerBot';
+    const botLink = `https://t.me/${botName}?start=${first.id}`;
     const msg = `السلام عليكم الأستاذ/ ${first.name}\n\n🏢 نظام إدارة اتحاد الملاك (Omara Manager) أصبح متاح على تليجرام!\n\nاضغط على الرابط التالي للاشتراك:\n${botLink}\n\nمن خلال البوت تقدر:\n✅ تشوف حسابك ومتأخراتك\n📅 تفاصيل المصاريف الشهرية\n🔧 إبلاغ عن أعطال\n🚨 أرقام طوارئ\n\nشكراً لتعاونكم 🙏`;
 
     window.open(`https://wa.me/${ph}?text=${encodeURIComponent(msg)}`, '_blank');
