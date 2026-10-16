@@ -1899,47 +1899,62 @@ function doSepUnit(){
 
  pushUndo('فصل وحدات عن '+r.name);
 
- // Extract selected units (remove from old, add to new) — go in reverse to preserve indices
+ // ─── تصوير متأخرات المالك القديم الشهرية قبل الفصل ───
+ const oldAutoTotal = (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry).reduce((a,d)=>a+(parseFloat(d.amount)||0),0);
+
+ // ─── نقل الوحدات ───
  const unitsToMove=selUis.sort((a,b)=>b-a).map(ui=>{
    const u=JSON.parse(JSON.stringify(r.units[ui]));
    r.units.splice(ui,1);
    return u;
  });
- unitsToMove.reverse(); // restore original order
- if(!D.sokan[targetIdx].units) D.sokan[targetIdx].units=[];
- unitsToMove.forEach(u=>D.sokan[targetIdx].units.push(u));
-
- // Handle debts: freeze accounts to separation date
- // Monthly debts (auto-generated from months) for months when the apartment was
- // in the old owner's possession STAY with the old owner — this happens automatically
- // because recalculateAll() uses the month's distribution which is based on who had units at save time.
- //
- // BUT since recalculateAll() recalculates ALL months based on CURRENT unit ownership,
- // we need to mark the old months so the old owner keeps their share.
- // Strategy: for all existing saved months, add the NEW resident to exemptResidentIds
- // so they don't get charged for past months. The old owner's past charges stay as-is
- // because recalculate will see fewer units for them going forward.
-
+ unitsToMove.reverse();
  const target=D.sokan[targetIdx];
+ if(!target.units) target.units=[];
+ unitsToMove.forEach(u=>target.units.push(u));
+
+ // ─── حماية المالك الجديد من الشهور القديمة ───
+ // exemptResidentIds → يمنعه من الحساب في التوزيع
+ // separationExemptIds → يمنع ظهور أي سطر "معفي" في كارته
  D.months.forEach(m=>{
    if(!m.exemptResidentIds) m.exemptResidentIds=[];
    if(!m.exemptResidentIds.includes(target.id)) m.exemptResidentIds.push(target.id);
+   if(!m.separationExemptIds) m.separationExemptIds=[];
+   if(!m.separationExemptIds.includes(target.id)) m.separationExemptIds.push(target.id);
  });
 
- // Handle manual debts transfer if chosen
+ // ─── التعامل مع المتأخرات اليدوية حسب اختيار المستخدم ───
  if(debtOption==='move' && r.manualDebts && r.manualDebts.length){
    if(!target.manualDebts) target.manualDebts=[];
-   // Move all manual debts to new owner
-   r.manualDebts.forEach(d=>{
-     target.manualDebts.push(JSON.parse(JSON.stringify(d)));
-   });
+   r.manualDebts.forEach(d=>target.manualDebts.push(JSON.parse(JSON.stringify(d))));
    r.manualDebts=[];
  }
 
+ // ─── إعادة الحساب ───
  SD(D);
  recalculateAll();
+
+ // ─── تعويض المالك القديم ───
+ // بعد نقل الوحدات نصيبه الشهري قلّ لأن عنده وحدات أقل
+ // الفرق يُضاف كمتأخرة يدوية عشان الحساب يفضل ثابت زي ما كان
+ const newAutoTotal = (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry).reduce((a,d)=>a+(parseFloat(d.amount)||0),0);
+ const diff = Math.round(oldAutoTotal - newAutoTotal);
+ if(diff > 0){
+   if(!r.manualDebts) r.manualDebts=[];
+   r.manualDebts.push({
+     id:'md_'+Math.random().toString(36).substr(2,9),
+     amount: diff, originalAmount: diff,
+     desc: `متأخرات ثابتة قبل فصل (${unitDescs}) بتاريخ ${new Date().toLocaleDateString('ar-EG')}`,
+     addedDate: new Date().toISOString().split('T')[0],
+     isSeparationDebt: true
+   });
+   SD(D);
+   recalculateAll();
+ }
+
  bootstrap.Modal.getInstance(document.getElementById('modSep')).hide();
- T(`✅ تم فصل ${unitsToMove.length} وحدة عن ${r.name} ونقلها إلى ${target.name}. الحسابات القديمة ثابتة والحساب الجديد يبدأ من الشهر القادم.`,'s');
+ rSokan();
+ T(`✅ تم فصل ${unitsToMove.length} وحدة عن ${r.name} ونقلها إلى ${target.name}.\n📌 الحسابات القديمة ثابتة — المالك الجديد يبدأ من الشهر القادم.`,'s');
 }
 
 // ---- DEBTS AND RANGES CALCULATION ----
@@ -2376,6 +2391,9 @@ function recalculateAll(){
             const r = D.sokan.find(s => s.id === d.id);
             if(!r) return;
             if(!r.debts) r.debts = [];
+            // تخطي السكان المفصولين (نقل ملكية) — لا يظهر لهم أي سطر عن الشهور القديمة
+            const sepSet = new Set(m.separationExemptIds || []);
+            if(sepSet.has(d.id)) return;
             if(d.total > 0){
                 r.debts.push({amount: d.total, desc: `مصاريف ${MN[m.month]} ${m.year}`, isMonthlyDue:true, dueMonth:m.month, dueYear:m.year});
             } else if(d.exemptNote){
