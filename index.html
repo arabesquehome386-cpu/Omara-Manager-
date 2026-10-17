@@ -138,7 +138,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
  </div>
  
  <div class="d-flex flex-wrap gap-2 mb-3 align-items-center bg-white p-3 rounded-3 border border-light">
-  <button class="btn btn-warn px-3 py-2 text-white" onclick="recalculateAll()" title="إعادة تجميع وحساب جميع الفواتير والدفعات للشهور التاريخية بشكل تلقائي لمعالجة التعديلات وتحديث كل الجداول"><i class="fas fa-sync-alt"></i> تحديث وإعادة حساب الكل</button>
+  <button class="btn btn-warn px-3 py-2 text-white" onclick="forceRecalculateAll()" title="إعادة توزيع كل مصاريف كل الشهور من جديد حسب السكان والوحدات المسجلة حالياً وقت الضغط على الزر، بما فيها الشهور المجمّدة بعد عمليات الفصل"><i class="fas fa-sync-alt"></i> تحديث وإعادة حساب الكل</button>
   <button class="btn btn-a" onclick="ST('masarif')"><i class="fas fa-plus"></i> شهر جديد</button>
   <button class="btn btn-wa" onclick="remindAll()"><i class="fab fa-whatsapp"></i> تذكير الكل</button>
   <button class="btn btn-p" onclick="ST('settings')"><i class="fas fa-cog"></i> الإعدادات والنسخ الاحتياطي</button>
@@ -1899,8 +1899,12 @@ function doSepUnit(){
 
  pushUndo('فصل وحدات عن '+r.name);
 
- // ─── تصوير متأخرات المالك القديم الشهرية قبل الفصل ───
- const oldAutoTotal = (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry).reduce((a,d)=>a+(parseFloat(d.amount)||0),0);
+ // ─── تجميد كل الشهور الموجودة حالياً بتوزيعها الصحيح الحالي قبل نقل الوحدات ───
+ // أي شهر موجود الآن يخص الفترة "قبل تاريخ الفصل"، فيجب أن يبقى بنصيب كل ساكن
+ // كما كان قبل النقل (المالك القديم بعدد وحداته القديم، والمالك الجديد لا نصيب له فيه أصلاً)
+ // ولا يُعاد حسابه أبداً بعد ذلك مهما تغيّرت ملكية الوحدات مستقبلاً.
+ recalculateAll();
+ D.months.forEach(m=>{ m.locked = true; });
 
  // ─── نقل الوحدات ───
  const unitsToMove=selUis.sort((a,b)=>b-a).map(ui=>{
@@ -1913,16 +1917,6 @@ function doSepUnit(){
  if(!target.units) target.units=[];
  unitsToMove.forEach(u=>target.units.push(u));
 
- // ─── حماية المالك الجديد من الشهور القديمة ───
- // exemptResidentIds → يمنعه من الحساب في التوزيع
- // separationExemptIds → يمنع ظهور أي سطر "معفي" في كارته
- D.months.forEach(m=>{
-   if(!m.exemptResidentIds) m.exemptResidentIds=[];
-   if(!m.exemptResidentIds.includes(target.id)) m.exemptResidentIds.push(target.id);
-   if(!m.separationExemptIds) m.separationExemptIds=[];
-   if(!m.separationExemptIds.includes(target.id)) m.separationExemptIds.push(target.id);
- });
-
  // ─── التعامل مع المتأخرات اليدوية حسب اختيار المستخدم ───
  if(debtOption==='move' && r.manualDebts && r.manualDebts.length){
    if(!target.manualDebts) target.manualDebts=[];
@@ -1931,26 +1925,10 @@ function doSepUnit(){
  }
 
  // ─── إعادة الحساب ───
+ // الشهور القديمة (قبل الفصل) مجمّدة بالفعل فلن تتأثر؛ الشهور الجديدة فقط
+ // ستُحسب من الآن فصاعداً بالوحدات الجديدة لكل من المالك القديم والمالك الجديد.
  SD(D);
  recalculateAll();
-
- // ─── تعويض المالك القديم ───
- // بعد نقل الوحدات نصيبه الشهري قلّ لأن عنده وحدات أقل
- // الفرق يُضاف كمتأخرة يدوية عشان الحساب يفضل ثابت زي ما كان
- const newAutoTotal = (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry).reduce((a,d)=>a+(parseFloat(d.amount)||0),0);
- const diff = Math.round(oldAutoTotal - newAutoTotal);
- if(diff > 0){
-   if(!r.manualDebts) r.manualDebts=[];
-   r.manualDebts.push({
-     id:'md_'+Math.random().toString(36).substr(2,9),
-     amount: diff, originalAmount: diff,
-     desc: `متأخرات ثابتة قبل فصل (${unitDescs}) بتاريخ ${new Date().toLocaleDateString('ar-EG')}`,
-     addedDate: new Date().toISOString().split('T')[0],
-     isSeparationDebt: true
-   });
-   SD(D);
-   recalculateAll();
- }
 
  bootstrap.Modal.getInstance(document.getElementById('modSep')).hide();
  rSokan();
@@ -2345,6 +2323,19 @@ function calculateSingleMonthDistribution(m) {
     });
 }
 
+// زرار "تحديث وإعادة حساب الكل" — عملية صريحة ومقصودة من المستخدم فقط.
+// تفك تجميد كل الشهور (بما فيها شهور ما قبل أي عملية فصل) وتعيد توزيع كل
+// المصاريف من جديد حسب السكان والوحدات المسجلة حالياً وقت الضغط على الزر.
+// بعكس الاستدعاءات التلقائية لـ recalculateAll() بعد كل عملية (دفعة/تعديل)،
+// التي تحترم تجميد الشهور القديمة ولا تغيّر توزيعها.
+function forceRecalculateAll(){
+    if(!D.months || !D.months.length){ recalculateAll(); return; }
+    if(!confirm('هل أنت متأكد؟ سيتم إعادة توزيع كل مصاريف كل الشهور من جديد طبقاً للسكان والوحدات المسجلة حالياً، بما في ذلك الشهور المجمّدة بعد عمليات فصل سابقة. استخدم هذا فقط لو متأكد من عمل تصحيح شامل.')) return;
+    D.months.forEach(m=>{ delete m.locked; });
+    recalculateAll();
+    T('✅ تم إعادة توزيع كل المصاريف من جديد طبقاً للتسجيل الحالي للسكان والوحدات','s');
+}
+
 function recalculateAll(){
     if(!D.sokan) return;
     T('<i class="fas fa-sync-alt fa-spin me-1"></i> جاري إعادة الحساب…','i');
@@ -2381,8 +2372,10 @@ function recalculateAll(){
     });
     
     // 3. Chronologically calculate distributions and add as debts
+    //    شهر "مجمّد" (locked) — عادة بسبب عملية فصل وحدات — يحتفظ بتوزيعه الأصلي كما هو
+    //    ولا يُعاد حسابه بعدد الوحدات الحالي، حتى لو تغيّرت ملكية الوحدات بعد ذلك التاريخ.
     D.months.forEach(m => {
-        const dist = calculateSingleMonthDistribution(m);
+        const dist = (m.locked && m.distribution) ? m.distribution : calculateSingleMonthDistribution(m);
         m.distribution = dist;
         
         dist.forEach(d => {
