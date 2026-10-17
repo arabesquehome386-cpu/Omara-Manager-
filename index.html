@@ -3824,14 +3824,18 @@ function saveEditDebt(){
 function rst(e){
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{
+  r.onload=async ev=>{
     try{
       const nd=JSON.parse(ev.target.result);
       if(nd&&nd.sokan){
         const keepUrl=getGsUrl();
         D=nd;
         if(!D.gsUrl && keepUrl) D.gsUrl=keepUrl; // حافظ على رابط جوجل شيت لو النسخة القديمة لم تكن تحتويه
-        SD(D);location.reload();
+        ensureDDefaults();
+        localStorage.setItem('omaraData',JSON.stringify(D));
+        localStorage.setItem('omaraLastSave',new Date().toISOString());
+        await syncToSupabase(D); // استنى الحفظ الفعلي على Supabase قبل الريلود عشان ما يترجعش للبيانات القديمة
+        location.reload();
       }
     }catch(e){T('ملف النسخة الاحتياطية غير صالح للترميم','e');}
   };
