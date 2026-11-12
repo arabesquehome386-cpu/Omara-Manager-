@@ -1858,7 +1858,7 @@ function renderERUnits(i){
          <div class="mb-2">
            <span class="text-muted small">متأخرات قديمة على المالك — اضغط على أي شهر لربطه بحساب المستأجر:</span>
            <div class="d-flex gap-2 flex-wrap mt-1">
-             ${getOwnerUnpaidMonths(i,ui).length ? getOwnerUnpaidMonths(i,ui).map(d=>{const linked=(u.tenant.arrearsOverrideMonths||[]).some(x=>x.month===d.dueMonth && x.year===d.dueYear);return `<span class="badge ${linked?'bg-warning text-dark':'bg-light text-dark border'}" style="cursor:pointer" onclick="toggleArrearsMonth(${i},${ui},${d.dueMonth},${d.dueYear})" title="${linked?'مربوط بالمستأجر — اضغط للرجوع للمالك':'اضغط لربطه بالمستأجر'}">${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م ${linked?'✓':''}</span>`;}).join('') : '<span class="text-muted small">لا يوجد متأخرات قديمة على المالك</span>'}
+             ${getUnitArrearsMonths(i,ui).length ? getUnitArrearsMonths(i,ui).map(d=>{const linked=d.linked;return `<span class="badge ${linked?'bg-warning text-dark':'bg-light text-dark border'}" style="cursor:pointer" onclick="toggleArrearsMonth(${i},${ui},${d.dueMonth},${d.dueYear})" title="${linked?'مربوط بالمستأجر — اضغط للرجوع للمالك':'اضغط لربطه بالمستأجر'}">${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م ${linked?'✓':''}</span>`;}).join('') : '<span class="text-muted small">لا يوجد متأخرات قديمة على المالك</span>'}
            </div>
          </div>
          <div class="d-flex gap-3 flex-wrap small">
@@ -3105,6 +3105,16 @@ function getOwnerUnpaidMonths(ri,ui){
     if(amt<=0) return null;
     return { dueMonth:d.dueMonth, dueYear:d.dueYear, amount: amt };
   }).filter(Boolean);
+}
+function getUnitArrearsMonths(ri,ui){
+  const r=D.sokan[ri]; const u=r && r.units[ui]; const tn=u&&u.tenant;
+  const unpaidOwner = getOwnerUnpaidMonths(ri,ui).map(d=>Object.assign({},d,{linked:false}));
+  const overrideSet = (tn && tn.arrearsOverrideMonths) || [];
+  const linkedMonths = overrideSet.map(ov=>{
+    const td = tn && (tn.debts||[]).find(d=>d.isMonthlyDue && d.dueMonth===ov.month && d.dueYear===ov.year);
+    return { dueMonth: ov.month, dueYear: ov.year, amount: td ? td.amount : 0, linked:true };
+  });
+  return unpaidOwner.concat(linkedMonths).sort((a,b)=>((a.dueYear*100+a.dueMonth)-(b.dueYear*100+b.dueMonth)));
 }
 function toggleArrearsMonth(ri,ui,month,year){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
