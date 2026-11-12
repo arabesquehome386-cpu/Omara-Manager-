@@ -1904,7 +1904,7 @@ function updUEx(ri,ui,field,val){
 }
 
 function updU(ri,ui,f,v){if(D.sokan[ri].units[ui])if(f==='count')D.sokan[ri].units[ui].count=parseInt(v)||1;else D.sokan[ri].units[ui][f]=v;}
-function delU(ri,ui){D.sokan[ri].units.splice(ui,1);openER(ri);}
+function delU(ri,ui){D.sokan[ri].units.splice(ui,1);renderERUnits(ri);}
 function saveER(){
  const i=parseInt(document.getElementById('erI').value);
  D.sokan[i].name=document.getElementById('erN').value.trim();D.sokan[i].phone=document.getElementById('erP').value.trim();
