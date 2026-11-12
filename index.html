@@ -2577,6 +2577,17 @@ function recalculateAll(){
     D.months.forEach(m => {
         const dist = (m.locked && m.distribution) ? m.distribution : calculateSingleMonthDistribution(m);
         m.distribution = dist;
+        // الشهور المجمّدة بتحتفظ بإجماليها القديم كما هو، لكن لو كانت من قبل إضافة ميزة متأخرات-المستأجر
+        // ممكن ينقصها unitBreakdown — نحسبها بس (من غير ما نلمس الإجمالي المجمّد) عشان تظهر في واجهة الربط
+        if(m.locked && dist.some(d=>d.unitBreakdown===undefined)){
+            const freshDist = calculateSingleMonthDistribution(m);
+            dist.forEach(d=>{
+                if(d.unitBreakdown===undefined){
+                    const fd = freshDist.find(x=>x.id===d.id);
+                    if(fd) d.unitBreakdown = fd.unitBreakdown;
+                }
+            });
+        }
         
         dist.forEach(d => {
             // مطابقة بالمعرّف الفريد (id) وليس بالاسم — مطابقة الاسم كانت تُسقط أو تخلط بيانات
