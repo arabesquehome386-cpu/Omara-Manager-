@@ -455,6 +455,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
      
      <div class="form-check mt-1"><input type="checkbox" class="form-check-input" id="repUnits" onchange="genRep()"><label class="form-check-label" for="repUnits">إظهار تفاصيل الوحدات (عدد الشقق/المطابخ/الإعفاءات)</label></div>
      <div class="form-check mt-1"><input type="checkbox" class="form-check-input" id="repReceipts" onchange="genRep()"><label class="form-check-label" for="repReceipts">إرفاق روابط إيصالات السداد والتحويلات</label></div>
+     <div class="form-check mt-1"><input type="checkbox" class="form-check-input" id="repHead" checked onchange="genRep()"><label class="form-check-label" for="repHead">إظهار اسم رئيس اتحاد الملاك في رأس التقرير</label></div>
      
      <div class="form-check mt-3 pt-2 border-top"><input type="checkbox" class="form-check-input" id="repFat" onchange="toggleRepFat(); genRep()"><label class="form-check-label fw-bold text-primary" for="repFat"><i class="fas fa-images"></i> إرفاق صور الفواتير في التقرير</label></div>
      <div id="repFatOpts" style="display:none" class="mt-2 p-2 bg-light border rounded">
@@ -469,6 +470,7 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
     <button class="btn btn-p w-100 mb-2" onclick="genRep()"><i class="fas fa-file-alt"></i> توليد التقرير</button>
     <button class="btn btn-ok w-100 mb-2" onclick="copyRep()"><i class="fas fa-copy"></i> نسخ كود النص (للواتساب)</button>
     <button class="btn btn-wa w-100 mb-2" onclick="sendRepWA()"><i class="fab fa-whatsapp"></i> إرسال مباشرة عبر واتساب</button>
+    <button class="btn btn-wa w-100 mb-2" onclick="sendRepWAFile()" title="يرفق ملف PDF فعلي مع الرسالة (يحتاج متصفح موبايل يدعم المشاركة، وإلا سيتم تحميل PDF تلقائياً لإرفاقه يدوياً)"><i class="fab fa-whatsapp"></i> إرسال مباشر على واتساب (مع ملف PDF)</button>
     <div class="d-flex gap-2">
      <button class="btn btn-rd flex-grow-1" onclick="expPDF()"><i class="fas fa-file-pdf"></i> طباعة / تصدير PDF</button>
      <button class="btn btn-p flex-grow-1" onclick="expHTML()"><i class="fas fa-file-code"></i> تحميل كصفحة HTML</button>
@@ -1092,6 +1094,7 @@ function getOrCreateFolder(name) {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 
 <!-- ===== شاشة تسجيل الدخول (بوابة قبل استخدام البرنامج) ===== -->
 <div id="authGate" style="position:fixed;inset:0;background:#f0f4f8;z-index:99999;display:flex;align-items:center;justify-content:center;direction:rtl;">
@@ -2872,7 +2875,8 @@ function rSettingsInfo(){
  if(el4){const d=localStorage.getItem('omaraLastGsSync');el4.textContent=d?new Date(d).toLocaleString('ar-EG'):'لم تتم مزامنة بعد';}
 }
 
-function getBuildingHeaderHTML(title) {
+function getBuildingHeaderHTML(title, showHead) {
+    if(showHead === undefined) showHead = true;
     const bNo  = D.buildingNo || '—';
     const bHead = D.unionHead || '—';
     const bAddr = D.buildingAddress || '—';
@@ -2884,7 +2888,7 @@ function getBuildingHeaderHTML(title) {
             <h3 style="color: #0f2b46; margin: 0 0 6px 0; font-family: 'Segoe UI', Tahoma, sans-serif;">${title}</h3>
             <div style="font-size: 0.85rem; color: #6b7a8d; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
                 <span>🏢 <strong>عمارة رقم:</strong> ${bNo}</span>
-                <span>👤 <strong>رئيس اتحاد الملاك:</strong> ${bHead}</span>
+                ${showHead ? `<span>👤 <strong>رئيس اتحاد الملاك:</strong> ${bHead}</span>` : ''}
                 <span>📍 <strong>العنوان:</strong> ${bAddr}</span>
             </div>
         </div>
@@ -2961,6 +2965,7 @@ function genRep(){
  const shUnits=document.getElementById('repUnits').checked;
  const shReceipts=document.getElementById('repReceipts').checked;
  const shDebts=document.getElementById('repDebts')?document.getElementById('repDebts').checked:true;
+ const shHead=document.getElementById('repHead')?document.getElementById('repHead').checked:true;
  const detKeys=repMonthKeys('Det');   // فلتر شهور تفاصيل الخدمات
  const payKeys=repMonthKeys('Pay');   // فلتر شهور الدفعات
  const debtKeys=repMonthKeys('Debt'); // فلتر شهور المستحقات غير المسددة
@@ -2971,7 +2976,7 @@ function genRep(){
  if(pm.vf&&pm.vf.on&&pm.vf.val)pmLine+=`<br>📱 فودافون كاش: <strong>${pm.vf.val}</strong>`;
  
  let html=`<div style="font-family:Tahoma,sans-serif;direction:rtl;text-align:right;">`;
- html += getBuildingHeaderHTML(`كشف حساب العمارة المطالب به — شهر ${MN[now.getMonth()+1]} ${now.getFullYear()}`);
+ html += getBuildingHeaderHTML(`كشف حساب العمارة المطالب به — شهر ${MN[now.getMonth()+1]} ${now.getFullYear()}`, shHead);
  
  const res=si===''?D.sokan:[D.sokan[parseInt(si)]];
  res.forEach(r=>{
@@ -3168,6 +3173,7 @@ function genRep(){
  html+=`</div>`;
  document.getElementById('repOut').innerHTML=html;
  window._repPhone=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].phone:null;
+ window._repName=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].name:'كل_السكان';
 }
 
 function copyRep(){
@@ -3192,11 +3198,44 @@ function sendRepWA(){
  window.open(`https://wa.me/${ph}?text=${encodeURIComponent(out.innerText)}`,'_blank');
 }
 
+async function sendRepWAFile(){
+ const out = document.getElementById('repOut');
+ if(out.innerText.trim().startsWith('اختر')) return T('يرجى توليد التقرير أولاً للتمكن من الإرسال','e');
+ const ph=fmtPhone(window._repPhone);
+ const repName = (window._repName||'كشف_حساب').replace(/\s+/g,'_');
+ const fileName = `تقرير_${repName}.pdf`;
+ if(typeof html2pdf === 'undefined'){
+   if(!ph)return T('لا يوجد رقم واتساب مسجل للساكن، وتعذر تحميل مكتبة PDF','e');
+   T('تعذر تحميل مكتبة إنشاء PDF — تم إرسال نص التقرير فقط','e');
+   window.open(`https://wa.me/${ph}?text=${encodeURIComponent(out.innerText)}`,'_blank');
+   return;
+ }
+ T('<i class="fas fa-spin fa-spinner"></i> جاري تجهيز ملف PDF…','i');
+ try{
+   const blob = await html2pdf().from(out).set({margin:[10,12,10,12],filename:fileName,html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).outputPdf('blob');
+   const file = new File([blob], fileName, {type:'application/pdf'});
+   if(navigator.canShare && navigator.canShare({files:[file]})){
+     await navigator.share({files:[file], title:fileName, text:fileName});
+     T('تم فتح نافذة المشاركة — اختر واتساب لإرسال الملف','s');
+   } else {
+     const a=document.createElement('a');
+     a.href=URL.createObjectURL(blob);
+     a.download=fileName;
+     a.click();
+     T('تم تحميل ملف PDF — يرجى إرفاقه يدوياً في واتساب (المتصفح الحالي لا يدعم المشاركة المباشرة للملفات)','i');
+     if(ph) window.open(`https://wa.me/${ph}?text=${encodeURIComponent(out.innerText)}`,'_blank');
+   }
+ }catch(err){
+   T('حدث خطأ أثناء إنشاء ملف PDF: '+(err.message||err),'e');
+ }
+}
+
 function expPDF(){
   const out=document.getElementById('repOut').innerHTML;
   if(!out||out.includes('اختر ساكناً'))return T('يرجى توليد التقرير المالي أولاً للتمكن من طباعته','e');
+  const repTitle = `تقرير_${(window._repName||'كشف_حساب').replace(/\s+/g,'_')}`;
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>كشف حساب مالي</title>
+  w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${repTitle}</title>
   <style>
     @page{size:A4;margin:10mm 12mm}
     body{font-family:Tahoma,Arial,sans-serif;direction:rtl;text-align:right;font-size:9.5pt;color:#111;margin:0;padding:0}
@@ -3220,10 +3259,11 @@ function expPDF(){
 function expHTML(){
   const out=document.getElementById('repOut').innerHTML;
   if(!out||out.includes('اختر ساكناً'))return T('يرجى توليد التقرير أولاً للتحميل','e');
-  const blob=new Blob([`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>Omara Manager — تقرير مالي</title></head><body style="background:#f0f4f8;padding:30px;max-width:800px;margin:auto">${out}</body></html>`],{type:'text/html'});
+  const repName = (window._repName||'العمارة').replace(/\s+/g,'_');
+  const blob=new Blob([`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>Omara Manager — تقرير ${repName}</title></head><body style="background:#f0f4f8;padding:30px;max-width:800px;margin:auto">${out}</body></html>`],{type:'text/html'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='تقرير_العمارة.html';
+  a.download=`تقرير_${repName}.html`;
   a.click();
   T('تم تصدير ملف HTML بنجاح','s');
 }
