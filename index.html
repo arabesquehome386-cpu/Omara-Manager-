@@ -1410,7 +1410,20 @@ function rDash() {
  }).join('');
 }
 
-function rDD(){const r=document.getElementById('repR');if(!r)return;r.innerHTML='<option value="">-- كشف حساب لجميع السكان --</option>'+D.sokan.map((s,i)=>`<option value="${i}">${s.name||'ساكن '+(i+1)}</option>`).join('');populateRepMonthLists();}
+function rDD(){
+  const r=document.getElementById('repR');if(!r)return;
+  let opts='<option value="">-- كشف حساب لجميع السكان --</option>';
+  D.sokan.forEach((s,i)=>{
+    opts+=`<option value="${i}">${s.name||'ساكن '+(i+1)}</option>`;
+    (s.units||[]).forEach((u,ui)=>{
+      if(u.tenant && u.tenant.active){
+        opts+=`<option value="t_${i}_${ui}">↳ ${u.tenant.name||'مستأجر'} (مستأجر - ${s.name||'ساكن '+(i+1)})</option>`;
+      }
+    });
+  });
+  r.innerHTML=opts;
+  populateRepMonthLists();
+}
 
 // ---- REPORT MONTH SCOPE HELPERS ----
 function populateRepMonthLists(){
@@ -1841,7 +1854,7 @@ function openER(i){
      <div class="mt-2 p-2 border rounded" style="background:#fff7ed;border-color:#fdba74">
        ${u.tenant && u.tenant.active ? `
          <div class="d-flex justify-content-between align-items-center mb-1">
-           <div class="small fw-bold" style="color:#92400e"><i class="fas fa-user-tag me-1"></i>مستأجر: ${u.tenant.name||'—'} <span class="text-muted">(${u.tenant.phone||'—'})</span></div>
+           <div class="small fw-bold" style="color:#92400e"><i class="fas fa-user-tag me-1"></i>مستأجر: ${u.tenant.name||'—'}</div>
            <button class="btn btn-sm btn-rd py-0 px-2" onclick="deactivateTenant(${i},${ui})" title="فصل المستأجر — الأرقام القديمة تبقى سجل تاريخي على المستأجر"><i class="fas fa-user-slash"></i> فصل المستأجر</button>
          </div>
          <div class="d-flex gap-3 flex-wrap small">
@@ -1851,6 +1864,12 @@ function openER(i){
            <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatZab_${ui}" ${u.tenant.categories&&u.tenant.categories.zab?'checked':''} onchange="updTenantCat(${i},${ui},'zab',this.checked)"><label class="form-check-label" for="tCatZab_${ui}">رفع قمامة</label></div>
            <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatSia_${ui}" ${u.tenant.categories&&u.tenant.categories.sia?'checked':''} onchange="updTenantCat(${i},${ui},'sia',this.checked)"><label class="form-check-label" for="tCatSia_${ui}">صيانة</label></div>
            <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatMf_${ui}" ${u.tenant.categories&&u.tenant.categories.maintFee?'checked':''} onchange="updTenantCat(${i},${ui},'maintFee',this.checked)"><label class="form-check-label" for="tCatMf_${ui}">اشتراك الصيانة</label></div>
+         </div>
+         <div class="d-flex gap-2 flex-wrap align-items-center mt-2 mb-1">
+           <span class="text-muted small">أرقام التواصل:</span>
+           ${tenantPhones(u.tenant).map((p,pi)=>`<span class="badge bg-light text-dark border">${p} <a href="#" onclick="removeTenantPhone(${i},${ui},${pi});return false;" style="color:#dc2626;text-decoration:none;margin-right:3px">×</a></span>`).join('') || '<span class="text-muted small">لا يوجد</span>'}
+           <input type="text" class="form-control form-control-sm" style="width:120px" id="tAddPhone_${ui}" placeholder="رقم جديد">
+           <button class="btn btn-sm btn-p py-0 px-2" onclick="addTenantPhone(${i},${ui})"><i class="fas fa-plus"></i></button>
          </div>
          <div class="d-flex gap-1 mt-2">
            <button class="btn btn-sm btn-ok py-0 px-2" onclick="openPay(${i},'${i}_${ui}')"><i class="fas fa-hand-holding-usd"></i> تسجيل دفعة من المستأجر</button>
@@ -3015,7 +3034,7 @@ function addTenant(ri,ui){
   pushUndo('تسجيل مستأجر لوحدة '+(D.sokan[ri].name||''));
   u.tenant = {
     id: 'ten_'+Math.random().toString(36).substr(2,9),
-    name, phone, active:true,
+    name, phone, phones: phone?[phone]:[], active:true,
     categories:{water:true,naz:true,zab:true,sia:true,maintFee:false},
     debts:[], manualDebts:[], payments:[], advance:0,
     createdDate: new Date().toISOString().split('T')[0]
@@ -3045,9 +3064,26 @@ function deactivateTenant(ri,ui){
   openER(ri);
   T('✅ تم فصل المستأجر. حسابه القديم محفوظ كسجل تاريخي، والمصاريف من الآن فصاعداً بالكامل على المالك.','s');
 }
+function addTenantPhone(ri,ui){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
+  const el=document.getElementById(`tAddPhone_${ui}`);
+  const val=((el&&el.value)||'').trim();
+  if(!val) return T('يرجى كتابة رقم تليفون','e');
+  if(!u.tenant.phones) u.tenant.phones = u.tenant.phone?[u.tenant.phone]:[];
+  u.tenant.phones.push(val);
+  SD(D);
+  openER(ri);
+}
+function removeTenantPhone(ri,ui,pi){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
+  if(!u.tenant.phones) u.tenant.phones = u.tenant.phone?[u.tenant.phone]:[];
+  u.tenant.phones.splice(pi,1);
+  SD(D);
+  openER(ri);
+}
 function sendTenantWA(ri,ui){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
-  const ph=fmtPhone(tn.phone); if(!ph) return T('رقم واتساب غير صحيح أو غير متوفر لهذا المستأجر','e');
+  const ph=fmtPhone(tenantPrimaryPhone(tn)); if(!ph) return T('رقم واتساب غير صحيح أو غير متوفر لهذا المستأجر','e');
   const due=rDue(tn); const adv=tn.advance||0; const pm=D.payMethods||{};
   let payLine='';
   if(pm.instapay&&pm.instapay.on)payLine+=`\n💳 انستاباي: ${pm.instapay.val}`;
@@ -3216,7 +3252,7 @@ function genRep(){
  let html=`<div style="font-family:Tahoma,sans-serif;direction:rtl;text-align:right;">`;
  html += getBuildingHeaderHTML(`كشف حساب العمارة المطالب به — شهر ${MN[now.getMonth()+1]} ${now.getFullYear()}`, shHead);
  
- const res=si===''?D.sokan:[D.sokan[parseInt(si)]];
+ const res=resolveReportResidentsForSi(si);
  res.forEach(r=>{
   if(!r)return;
   const pays=r.payments||[],due=rDue(r),adv=r.advance||0;
@@ -3390,7 +3426,7 @@ function genRep(){
  // Receipt links summary (shReceipts) — dedicated section for all drive links across all shown residents
  if(shReceipts){
      const allLinks = [];
-     const res2 = si===''?D.sokan:[D.sokan[parseInt(si)]];
+     const res2=resolveReportResidentsForSi(si);
      res2.forEach(r=>{
          if(!r) return;
          (r.payments||[]).forEach(p=>{
@@ -3410,8 +3446,14 @@ function genRep(){
  
  html+=`</div>`;
  document.getElementById('repOut').innerHTML=html;
- window._repPhone=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].phone:null;
- window._repName=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].name:'كل_السكان';
+ if(si && si.indexOf('t_')===0){
+   const vr=resolveReportResidentsForSi(si)[0];
+   window._repPhone = vr ? tenantPrimaryPhone(vr) : null;
+   window._repName = vr ? vr.name : 'مستأجر';
+ } else {
+   window._repPhone=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].phone:null;
+   window._repName=si!==''&&D.sokan[parseInt(si)]?D.sokan[parseInt(si)].name:'كل_السكان';
+ }
 }
 
 function copyRep(){
@@ -3429,7 +3471,49 @@ function copyRep(){
     }
 }
 
-function sendRepWA(){
+// ---- دعم المستأجرين في التقارير: تمثيل افتراضي + بوابة اختيار المرسل إليه ----
+function tenantPhones(tn){ if(tn && tn.phones && tn.phones.length) return tn.phones; return (tn&&tn.phone)?[tn.phone]:[]; }
+function tenantPrimaryPhone(tn){ const ps=tenantPhones(tn); return ps[0]||''; }
+function resolveReportResidentsForSi(si){
+  if(si && si.indexOf('t_')===0){
+    const parts=si.split('_');
+    const tri=parseInt(parts[1]), tui=parseInt(parts[2]);
+    const tu=D.sokan[tri] && D.sokan[tri].units && D.sokan[tri].units[tui];
+    const tn=tu && tu.tenant;
+    if(!tn) return [];
+    return [Object.assign({}, tn, {units:[tu], name:(tn.name||'مستأجر')+' (مستأجر)'})];
+  }
+  return si===''?D.sokan:[D.sokan[parseInt(si)]];
+}
+async function sendReportTargets(sendOneFn){
+  const sel=document.getElementById('repR'); if(!sel) return;
+  const origVal=sel.value;
+  let targets=[origVal];
+  if(origVal!=='' && origVal.indexOf('t_')!==0){
+    const ri=parseInt(origVal);
+    const r=D.sokan[ri];
+    const tenantOpts=[];
+    (r&&r.units||[]).forEach((u,ui)=>{ if(u.tenant && u.tenant.active) tenantOpts.push('t_'+ri+'_'+ui); });
+    if(tenantOpts.length){
+      const ans=(prompt('هذا الساكن لديه مستأجر مسجل.\nهترسل التقرير لـ:\n1 = المالك فقط\n2 = المستأجر فقط\n3 = الاتنين (تقريرين منفصلين تمامًا)', '3')||'').trim();
+      if(ans==='1') targets=[origVal];
+      else if(ans==='2') targets=tenantOpts;
+      else if(ans==='3') targets=[origVal,...tenantOpts];
+      else return;
+    }
+  }
+  for(const tv of targets){
+    sel.value=tv;
+    genRep();
+    await sendOneFn();
+  }
+  sel.value=origVal;
+  genRep();
+}
+async function sendRepWA(){
+ await sendReportTargets(sendRepWA_one);
+}
+function sendRepWA_one(){
  const out = document.getElementById('repOut');
  if(out.innerText.trim().startsWith('اختر')) return T('يرجى توليد التقرير أولاً للتمكن من الإرسال','e');
  const ph=fmtPhone(window._repPhone);if(!ph)return T('لا يوجد رقم واتساب مسجل للساكن لإرسال التقرير إليه','e');
@@ -3437,6 +3521,9 @@ function sendRepWA(){
 }
 
 async function sendRepWAFile(){
+ await sendReportTargets(sendRepWAFile_one);
+}
+async function sendRepWAFile_one(){
  const out = document.getElementById('repOut');
  if(out.innerText.trim().startsWith('اختر')) return T('يرجى توليد التقرير أولاً للتمكن من الإرسال','e');
  const ph=fmtPhone(window._repPhone);
