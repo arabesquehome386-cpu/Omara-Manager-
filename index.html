@@ -2579,14 +2579,25 @@ function recalculateAll(){
         m.distribution = dist;
         // الشهور المجمّدة بتحتفظ بإجماليها القديم كما هو، لكن لو كانت من قبل إضافة ميزة متأخرات-المستأجر
         // ممكن ينقصها unitBreakdown — نحسبها بس (من غير ما نلمس الإجمالي المجمّد) عشان تظهر في واجهة الربط
-        if(m.locked && dist.some(d=>d.unitBreakdown===undefined)){
-            const freshDist = calculateSingleMonthDistribution(m);
-            dist.forEach(d=>{
-                if(d.unitBreakdown===undefined){
-                    const fd = freshDist.find(x=>x.id===d.id);
-                    if(fd) d.unitBreakdown = fd.unitBreakdown;
-                }
+        if(m.locked){
+            const hasAnyActiveTenant = dist.some(d=>{
+                const res0 = D.sokan.find(s=>s.id===d.id);
+                return res0 && (res0.units||[]).some(u=>u.tenant && u.tenant.active);
             });
+            if(hasAnyActiveTenant || dist.some(d=>d.unitBreakdown===undefined)){
+                const freshDist = calculateSingleMonthDistribution(m);
+                dist.forEach(d=>{
+                    const fd = freshDist.find(x=>x.id===d.id);
+                    if(!fd) return;
+                    if(d.unitBreakdown===undefined) d.unitBreakdown = fd.unitBreakdown;
+                    const res1 = D.sokan.find(s=>s.id===d.id);
+                    const hasActiveTenant = res1 && (res1.units||[]).some(u=>u.tenant && u.tenant.active);
+                    if(hasActiveTenant){
+                        d.water=fd.water; d.nazafa=fd.nazafa; d.zabala=fd.zabala; d.siana=fd.siana; d.maintFee=fd.maintFee;
+                        d.total=fd.total; d.tenants=fd.tenants; d.unitBreakdown=fd.unitBreakdown;
+                    }
+                });
+            }
         }
         
         dist.forEach(d => {
