@@ -1854,10 +1854,13 @@ function openER(i){
      <div class="mt-2 p-2 border rounded" style="background:#fff7ed;border-color:#fdba74">
        ${u.tenant && u.tenant.active ? `
          <div class="d-flex justify-content-between align-items-center mb-1">
-           <div class="small fw-bold" style="color:#92400e"><i class="fas fa-user-tag me-1"></i>مستأجر: ${u.tenant.name||'—'} <span class="text-muted" style="font-size:.7rem">(بدأ: ${u.tenant.startDate||u.tenant.createdDate||'—'})</span></div>
-           <div class="d-flex gap-1">
-             <button class="btn btn-sm btn-p py-0 px-2" onclick="editTenantArrears(${i},${ui})" title="تعديل تاريخ البدء والمتأخرات القديمة المنقولة للمستأجر"><i class="fas fa-edit"></i> تعديل</button>
-             <button class="btn btn-sm btn-rd py-0 px-2" onclick="deactivateTenant(${i},${ui})" title="فصل المستأجر — الأرقام القديمة تبقى سجل تاريخي على المستأجر"><i class="fas fa-user-slash"></i> فصل المستأجر</button>
+           <div class="small fw-bold" style="color:#92400e"><i class="fas fa-user-tag me-1"></i>مستأجر: ${u.tenant.name||'—'}</div>
+           <button class="btn btn-sm btn-rd py-0 px-2" onclick="deactivateTenant(${i},${ui})" title="فصل المستأجر — الأرقام القديمة تبقى سجل تاريخي على المستأجر"><i class="fas fa-user-slash"></i> فصل المستأجر</button>
+         </div>
+         <div class="mb-2">
+           <span class="text-muted small">متأخرات قديمة على المالك — اضغط على أي شهر لربطه بحساب المستأجر:</span>
+           <div class="d-flex gap-2 flex-wrap mt-1">
+             ${getOwnerUnpaidMonths(i).length ? getOwnerUnpaidMonths(i).map(d=>{const linked=(u.tenant.arrearsOverrideMonths||[]).some(x=>x.month===d.dueMonth && x.year===d.dueYear);return `<span class="badge ${linked?'bg-warning text-dark':'bg-light text-dark border'}" style="cursor:pointer" onclick="toggleArrearsMonth(${i},${ui},${d.dueMonth},${d.dueYear})" title="${linked?'مربوط بالمستأجر — اضغط للرجوع للمالك':'اضغط لربطه بالمستأجر'}">${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م ${linked?'✓':''}</span>`;}).join('') : '<span class="text-muted small">لا يوجد متأخرات قديمة على المالك</span>'}
            </div>
          </div>
          <div class="d-flex gap-3 flex-wrap small">
@@ -3046,50 +3049,33 @@ function addTenant(ri,ui){
   const phone=((phoneEl&&phoneEl.value)||'').trim();
   if(!name) return T('يرجى كتابة اسم المستأجر','e');
   const today=new Date().toISOString().split('T')[0];
-  const startDate=((prompt('من أي تاريخ بدأ المستأجر؟ (سنة-شهر-يوم)', today)||'').trim())||today;
   pushUndo('تسجيل مستأجر لوحدة '+(D.sokan[ri].name||''));
   u.tenant = {
     id: 'ten_'+Math.random().toString(36).substr(2,9),
     name, phone, phones: phone?[phone]:[], active:true,
     categories:{water:true,naz:true,zab:true,sia:true,maintFee:false},
     debts:[], manualDebts:[], payments:[], advance:0,
-    startDate, arrearsOverrideMonths:[],
+    startDate: today, arrearsOverrideMonths:[],
     createdDate: today
   };
-  assignOldArrearsToTenant(ri,ui);
   SD(D);
-  openER(ri);
   recalculateAll();
-  T('✅ تم تسجيل المستأجر — سيبدأ نصيبه من المصاريف من تاريخ البدء المحدد','s');
+  openER(ri);
+  T('✅ تم تسجيل المستأجر — المصاريف من دلوقتي تتقسم معاه. لو فيه متأخرات قديمة على المالك هتظهر جمب اسمه تقدر تدوس عليها لربطها به','s');
 }
-function assignOldArrearsToTenant(ri,ui){
-  const r=D.sokan[ri]; const u=r && r.units[ui]; const tn=u&&u.tenant; if(!tn) return;
-  const sParts=(tn.startDate||'').split('-');
-  const startKey=sParts.length>=2?(parseInt(sParts[0])*100+parseInt(sParts[1])):0;
-  const oldArrears=(r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry && (parseFloat(d.amount)||0)>0 && ((d.dueYear*100)+d.dueMonth)<startKey);
-  if(!oldArrears.length) return;
-  const list=oldArrears.map((d,idx)=>`${idx+1}) ${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م`).join('\n');
-  const ans=((prompt(`فيه متأخرات قديمة على هذا الساكن قبل تاريخ بدء المستأجر:\n${list}\n\nاكتب أرقام الشهور (مفصولة بفاصلة) اللي تحب تحطها على حساب المستأجر بدل المالك، أو اتركها فاضية لو كلها تفضل على المالك:`, '')||'').trim());
-  if(!ans) return;
-  const picks=ans.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n>=1&&n<=oldArrears.length);
-  if(!picks.length) return;
+function getOwnerUnpaidMonths(ri){
+  const r=D.sokan[ri]; if(!r) return [];
+  return (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry && (parseFloat(d.amount)||0)>0);
+}
+function toggleArrearsMonth(ri,ui,month,year){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
   if(!tn.arrearsOverrideMonths) tn.arrearsOverrideMonths=[];
-  picks.forEach(p=>{
-    const d=oldArrears[p-1];
-    tn.arrearsOverrideMonths.push({month:d.dueMonth, year:d.dueYear});
-  });
-}
-function editTenantArrears(ri,ui){
-  const r=D.sokan[ri]; const u=r && r.units[ui]; const tn=u&&u.tenant; if(!tn) return;
-  const newStart=((prompt('تعديل تاريخ بدء المستأجر (سنة-شهر-يوم):', tn.startDate||tn.createdDate||'')||'').trim());
-  if(newStart) tn.startDate=newStart;
-  SD(D);
-  recalculateAll();
-  assignOldArrearsToTenant(ri,ui);
+  const idx=tn.arrearsOverrideMonths.findIndex(x=>x.month===month && x.year===year);
+  if(idx>=0) tn.arrearsOverrideMonths.splice(idx,1);
+  else tn.arrearsOverrideMonths.push({month,year});
   SD(D);
   recalculateAll();
   openER(ri);
-  T('✅ تم تحديث تاريخ البدء والمتأخرات المنقولة للمستأجر','s');
 }
 function updTenantCat(ri,ui,field,val){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
