@@ -2487,10 +2487,12 @@ const unitBase = []; // لكل وحدة: نصيبها الأساسي قبل تو
             ow-=tw; on-=tnz; oz-=tz; os-=ts; omfx-=tm;
             tenants.push({unitNumber:ub.u.number, unitType:ub.u.type, tenantId:tn.id, name:tn.name, phone:tn.phone, water:tw, nazafa:tnz, zabala:tz, siana:ts, maintFee:tm, total:tTotal});
         });
+        const realResidentForUB = D.sokan.find(s=>s.id===r.id);
         const unitBreakdown = (r.unitBase||[]).map(ub=>{
             const ratio = r.units>0 ? (ub.count/r.units) : 0;
             const full = Math.round(ub.w+addW*ratio) + Math.round(ub.n+addN*ratio) + Math.round(ub.z+addZ*ratio) + Math.round(ub.s+addS*ratio) + Math.round(ub.mf+addM*ratio);
-            return { ui: (r.units||[]).indexOf(ub.u), total: full };
+            const uiIdx = realResidentForUB ? (realResidentForUB.units||[]).indexOf(ub.u) : -1;
+            return { ui: uiIdx, total: full };
         });
         const total = ow+on+oz+os+omfx;
         return {
