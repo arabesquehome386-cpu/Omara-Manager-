@@ -914,6 +914,7 @@ function getOrCreateFolder(name) {
  <div class="modal-header"><h5 class="modal-title"><i class="fas fa-money-bill me-2"></i>تسجيل دفعة أو سداد شهور السكان</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
  <div class="modal-body">
   <input type="hidden" id="pIdx">
+  <input type="hidden" id="pTenantKey">
   <div class="row g-2 mb-2">
       <div class="col-md-6"><label class="form-label">الساكن</label><input class="form-control bg-light" id="pName" readonly></div>
       <div class="col-md-6"><label class="form-label">المتأخرات الحالية المتبقية</label><input class="form-control bg-light text-danger fw-bold" id="pDue" readonly></div>
@@ -1362,7 +1363,7 @@ function rDue(r){
   return Math.round(monthly + manual);
 }
 function totDue(){return Math.round(D.sokan.reduce((a,r)=>a+rDue(r),0));}
-function ubs(units){if(!units||!units.length)return'<span class="text-muted small">—</span>';const cm={'شقة':'bsha','استوديو':'bstu','مطبخ':'bmat','مخزن':'bmak'};return units.map(u=>`<span class="bu ${cm[u.type]||'bg-secondary text-white'}">${u.type}${u.number?' #'+u.number:''} ×${u.count}</span>`).join('');}
+function ubs(units){if(!units||!units.length)return'<span class="text-muted small">—</span>';const cm={'شقة':'bsha','استوديو':'bstu','مطبخ':'bmat','مخزن':'bmak'};return units.map(u=>{const tTag=(u.tenant&&u.tenant.active)?` <span class="badge" style="background:#f59e0b;color:#fff;font-size:.62rem" title="مستأجر: ${u.tenant.name||''}"><i class="fas fa-user-tag"></i> ${u.tenant.name||'مستأجر'}</span>`:'';return `<span class="bu ${cm[u.type]||'bg-secondary text-white'}">${u.type}${u.number?' #'+u.number:''} ×${u.count}</span>${tTag}`;}).join('');}
 function fd(d){try{return new Date(d).toLocaleDateString('ar-EG');}catch(e){return d||'';}}
 function confirm2(msg,fn){if(confirm(msg))fn();}
 
@@ -1620,6 +1621,12 @@ function delSqM(i){
       const res = D.sokan.find(s => s.id === log.residentId);
       if (res) {
           res.payments = (res.payments || []).filter(p => p.id !== log.paymentId);
+      } else {
+          // قد تكون الدفعة خاصة بمستأجر (حساب مستقل) وليست ساكن
+          const tu = findTenantUnit(log.residentId);
+          if (tu && tu.u.tenant) {
+              tu.u.tenant.payments = (tu.u.tenant.payments || []).filter(p => p.id !== log.paymentId);
+          }
       }
   }
   
@@ -1723,6 +1730,7 @@ function rSokan(){
       </div>
     </div>
     <div class="mb-1">${ubs(r.units)}</div>
+    ${(r.units||[]).some(u=>u.tenant&&u.tenant.active) ? `<div class="mb-1">${(r.units||[]).filter(u=>u.tenant&&u.tenant.active).map(u=>{const td=rDue(u.tenant);return `<span class="badge me-1" style="background:${td>0?'#dc2626':'#16a34a'};font-size:.68rem"><i class="fas fa-user-tag me-1"></i>${u.tenant.name}: ${td>0?Math.round(td)+' ج.م متأخرات':'سليم'}</span>`;}).join('')}</div>` : ''}
     ${dh}
     ${ph}
     ${!dh&&!ph?'<div class="text-success small mt-1"><i class="fas fa-check-circle me-1"></i>الحساب سليم تماماً ولا يوجد متأخرات</div>':''}
@@ -1790,6 +1798,25 @@ function addUnit(){
  SD(D);document.getElementById('uNum').value='';
  recalculateAll(); 
  T('تم ربط وإضافة الوحدات بنجاح للساكن','s');
+ // سؤال اختياري: تسجيل مستأجر لهذه الوحدة فوراً
+ const newUi = D.sokan[idx].units.findIndex(u=>u.type===type&&u.number===number);
+ if(newUi>=0 && !D.sokan[idx].units[newUi].tenant && confirm('هل هذه الوحدة مؤجّرة؟ هل تريد تسجيل مستأجر لها الآن؟')){
+     const tName = prompt('اسم المستأجر:');
+     if(tName && tName.trim()){
+         const tPhone = prompt('رقم واتساب المستأجر (اختياري):') || '';
+         pushUndo('تسجيل مستأجر لوحدة جديدة');
+         D.sokan[idx].units[newUi].tenant = {
+             id: 'ten_'+Math.random().toString(36).substr(2,9),
+             name: tName.trim(), phone: tPhone.trim(), active:true,
+             categories:{water:true,naz:true,zab:true,sia:true,maintFee:false},
+             debts:[], manualDebts:[], payments:[], advance:0,
+             createdDate: new Date().toISOString().split('T')[0]
+         };
+         SD(D);
+         recalculateAll();
+         T('✅ تم تسجيل المستأجر لهذه الوحدة. يمكنك تعديل البنود المطلوبة منه من شاشة تعديل الساكن.','s');
+     }
+ }
 }
 
 function openER(i){
@@ -1810,6 +1837,32 @@ function openER(i){
        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="uExNaz_${ui}" ${ex.naz?'checked':''} onchange="updUEx(${i},${ui},'naz',this.checked)"><label class="form-check-label" for="uExNaz_${ui}">نظافة</label></div>
        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="uExZab_${ui}" ${ex.zab?'checked':''} onchange="updUEx(${i},${ui},'zab',this.checked)"><label class="form-check-label" for="uExZab_${ui}">رفع قمامة</label></div>
        <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="uExSia_${ui}" ${ex.sia?'checked':''} onchange="updUEx(${i},${ui},'sia',this.checked)"><label class="form-check-label" for="uExSia_${ui}">صيانة</label></div>
+     </div>
+     <div class="mt-2 p-2 border rounded" style="background:#fff7ed;border-color:#fdba74">
+       ${u.tenant && u.tenant.active ? `
+         <div class="d-flex justify-content-between align-items-center mb-1">
+           <div class="small fw-bold" style="color:#92400e"><i class="fas fa-user-tag me-1"></i>مستأجر: ${u.tenant.name||'—'} <span class="text-muted">(${u.tenant.phone||'—'})</span></div>
+           <button class="btn btn-sm btn-rd py-0 px-2" onclick="deactivateTenant(${i},${ui})" title="فصل المستأجر — الأرقام القديمة تبقى سجل تاريخي على المستأجر"><i class="fas fa-user-slash"></i> فصل المستأجر</button>
+         </div>
+         <div class="d-flex gap-3 flex-wrap small">
+           <span class="text-muted me-1">مطلوب من المستأجر:</span>
+           <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatWater_${ui}" ${u.tenant.categories&&u.tenant.categories.water?'checked':''} onchange="updTenantCat(${i},${ui},'water',this.checked)"><label class="form-check-label" for="tCatWater_${ui}">مياه</label></div>
+           <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatNaz_${ui}" ${u.tenant.categories&&u.tenant.categories.naz?'checked':''} onchange="updTenantCat(${i},${ui},'naz',this.checked)"><label class="form-check-label" for="tCatNaz_${ui}">نظافة</label></div>
+           <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatZab_${ui}" ${u.tenant.categories&&u.tenant.categories.zab?'checked':''} onchange="updTenantCat(${i},${ui},'zab',this.checked)"><label class="form-check-label" for="tCatZab_${ui}">رفع قمامة</label></div>
+           <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatSia_${ui}" ${u.tenant.categories&&u.tenant.categories.sia?'checked':''} onchange="updTenantCat(${i},${ui},'sia',this.checked)"><label class="form-check-label" for="tCatSia_${ui}">صيانة</label></div>
+           <div class="form-check form-check-inline"><input type="checkbox" class="form-check-input" id="tCatMf_${ui}" ${u.tenant.categories&&u.tenant.categories.maintFee?'checked':''} onchange="updTenantCat(${i},${ui},'maintFee',this.checked)"><label class="form-check-label" for="tCatMf_${ui}">اشتراك الصيانة</label></div>
+         </div>
+         <div class="d-flex gap-1 mt-2">
+           <button class="btn btn-sm btn-ok py-0 px-2" onclick="openPay(${i},'${i}_${ui}')"><i class="fas fa-hand-holding-usd"></i> تسجيل دفعة من المستأجر</button>
+           <button class="btn btn-sm btn-wa py-0 px-2" onclick="sendTenantWA(${i},${ui})"><i class="fab fa-whatsapp"></i> تذكير المستأجر</button>
+         </div>
+       ` : `
+         <div class="d-flex gap-2 align-items-center flex-wrap">
+           <input class="form-control form-control-sm" style="width:140px" id="tNewName_${ui}" placeholder="اسم المستأجر">
+           <input class="form-control form-control-sm" style="width:120px" id="tNewPhone_${ui}" placeholder="رقم واتساب">
+           <button class="btn btn-sm btn-p py-0 px-2" onclick="addTenant(${i},${ui})"><i class="fas fa-user-plus"></i> تسجيل مستأجر لهذه الوحدة</button>
+         </div>
+       `}
      </div>
    </div>`;
  }).join(''):'<div class="text-muted small">لا يوجد شقق مرتبطة</div>';
@@ -1998,10 +2051,53 @@ function addDebt(){
  const idx=parseInt(document.getElementById('dRes').value);if(isNaN(idx))return T('يرجى تحديد الساكن','e');
  const amt=parseFloat(document.getElementById('dAmt').value)||0,desc=document.getElementById('dDesc').value.trim()||'متأخرات يدوية';
  if(amt<=0)return T('يرجى كتابة مبلغ صالح','e');
- pushUndo('إضافة متأخرات لـ '+D.sokan[idx].name);
- if(!D.sokan[idx].manualDebts) D.sokan[idx].manualDebts=[];
+ const r = D.sokan[idx];
+ // لو عند الساكن مستأجر نشط على أي وحدة من وحداته، نسأل مين يتحمل هذا البند (مالك / مستأجر / مناصفة)
+ const activeTenantUnits = (r.units||[]).filter(u=>u.tenant&&u.tenant.active);
+ let payer = 'owner', chosenUi = null;
+ if(activeTenantUnits.length){
+     const choice = prompt(
+         `هذا الساكن عنده مستأجر نشط. هذا البند (${desc}) على حساب:
+1 = المالك
+2 = المستأجر
+3 = مناصفة (50% لكل منهما)
+
+اكتب 1 أو 2 أو 3:`, '1'
+     );
+     if(choice==='2') payer='tenant';
+     else if(choice==='3') payer='split';
+     if(payer!=='owner'){
+         if(activeTenantUnits.length===1){
+             chosenUi = r.units.indexOf(activeTenantUnits[0]);
+         } else {
+             const names = activeTenantUnits.map((u,k)=>`${k+1} = ${u.type}${u.number?' #'+u.number:''} (${u.tenant.name})`).join('\n');
+             const pick = prompt(`اختر الوحدة/المستأجر المقصود:
+${names}`, '1');
+             const pickedIdx = (parseInt(pick)||1)-1;
+             const pickedUnit = activeTenantUnits[pickedIdx] || activeTenantUnits[0];
+             chosenUi = r.units.indexOf(pickedUnit);
+         }
+     }
+ }
+ pushUndo('إضافة متأخرات لـ '+r.name);
  const id='md_'+Math.random().toString(36).substr(2,9);
- D.sokan[idx].manualDebts.push({id, amount:Math.round(amt), desc, addedDate:new Date().toISOString().split('T')[0]});
+ const rounded = Math.round(amt);
+ if(payer==='owner'){
+     if(!r.manualDebts) r.manualDebts=[];
+     r.manualDebts.push({id, amount:rounded, desc, addedDate:new Date().toISOString().split('T')[0]});
+ } else if(payer==='tenant'){
+     const tn = r.units[chosenUi].tenant;
+     if(!tn.manualDebts) tn.manualDebts=[];
+     tn.manualDebts.push({id, amount:rounded, desc:desc+' (على المستأجر)', addedDate:new Date().toISOString().split('T')[0]});
+ } else {
+     const tn = r.units[chosenUi].tenant;
+     const half = Math.round(rounded/2);
+     const otherHalf = rounded-half;
+     if(!r.manualDebts) r.manualDebts=[];
+     r.manualDebts.push({id:id+'_o', amount:half, desc:desc+' (نصيب المالك — مناصفة)', addedDate:new Date().toISOString().split('T')[0]});
+     if(!tn.manualDebts) tn.manualDebts=[];
+     tn.manualDebts.push({id:id+'_t', amount:otherHalf, desc:desc+' (نصيب المستأجر — مناصفة)', addedDate:new Date().toISOString().split('T')[0]});
+ }
  SD(D);
  document.getElementById('dAmt').value='';document.getElementById('dDesc').value='';document.getElementById('dType').value='';
  document.getElementById('oldMonSec').style.display='none';document.getElementById('rangeSec').style.display='none';
@@ -2234,6 +2330,20 @@ function getExSmSetting(){
     const el=document.getElementById('exSm');
     return el ? el.checked : true;
 }
+// يرجع كل المستأجرين المسجلين حالياً (مرجع حقيقي داخل D.sokan[].units[].tenant)
+function getAllTenants(){
+    const out=[];
+    (D.sokan||[]).forEach(r=>(r.units||[]).forEach(u=>{ if(u.tenant) out.push(u.tenant); }));
+    return out;
+}
+function findTenantUnit(tenantId){
+    for(const r of (D.sokan||[])){
+        for(const u of (r.units||[])){
+            if(u.tenant && u.tenant.id===tenantId) return {r, u};
+        }
+    }
+    return null;
+}
 
 // ---- UNIFIED DISTRIBUTION CALCULATION (CRITICAL CORRECTION) ----
 function calculateSingleMonthDistribution(m) {
@@ -2259,18 +2369,25 @@ function calculateSingleMonthDistribution(m) {
         const rEx = r.exemptions || {}; // fallback for unmigrated data
         let units = 0;
         let payNaz=false, payZab=false, paySia=false; // هل يدفع الساكن هذا البند أصلاً (على الأقل وحدة واحدة)
+const unitBase = []; // لكل وحدة: نصيبها الأساسي قبل توزيع حصص المعفيين (يُستخدم لفصل نصيب المستأجر)
         (r.units || []).forEach(u => {
             const c = parseInt(u.count) || 0;
             const ex = u.exemptions || rEx;
             units += c;
-            w   += wpu * c; 
-            if(!ex.naz){ n   += naz * c; payNaz=true; }
-            if(!ex.zab && (!exSm || !EX.includes(u.type))){ z += zab * c; payZab=true; }
-            if(!ex.sia){ s   += sia * c; paySia=true; }
-            mfs += mf * c;
+            const bw = wpu * c;
+            const bn = !ex.naz ? naz * c : 0;
+            const bz = (!ex.zab && (!exSm || !EX.includes(u.type))) ? zab * c : 0;
+            const bs = !ex.sia ? sia * c : 0;
+            const bm = mf * c;
+            w += bw;
+            if(!ex.naz){ n += bn; payNaz=true; }
+            if(!ex.zab && (!exSm || !EX.includes(u.type))){ z += bz; payZab=true; }
+            if(!ex.sia){ s += bs; paySia=true; }
+            mfs += bm;
+            unitBase.push({u, count:c, w:bw, n:bn, z:bz, s:bs, mf:bm});
         });
         return { id: r.id, name: r.name || '—', units, payNaz, payZab, paySia,
-                 isExempt: monthExempt.has(r.id), water:w, nazafa:n, zabala:z, siana:s, maintFee:mfs };
+                 isExempt: monthExempt.has(r.id), water:w, nazafa:n, zabala:z, siana:s, maintFee:mfs, unitBase };
     });
     // بناء سبب الإعفاء النصي لكل ساكن (يُستخدم لعرض السبب حتى لو كان الناتج صفر بدل اختفاء الشهر بالكامل)
     function buildExemptNote(r){
@@ -2310,18 +2427,40 @@ function calculateSingleMonthDistribution(m) {
         const addM = elig.maintFee>0 ? pool.maintFee * (r.units/elig.maintFee) : 0;
         
         const w = r.water+addW, n = r.nazafa+addN, z = r.zabala+addZ, s = r.siana+addS, mfx = r.maintFee+addM;
-        const total = Math.round(w) + Math.round(n) + Math.round(z) + Math.round(s) + Math.round(mfx);
+        let ow = Math.round(w), on = Math.round(n), oz = Math.round(z), os = Math.round(s), omfx = Math.round(mfx);
+
+        // ─── فصل نصيب المستأجر (لو الوحدة مؤجّرة) عن نصيب المالك ───
+        const tenants = [];
+        (r.unitBase||[]).forEach(ub => {
+            const tn = ub.u && ub.u.tenant;
+            if(!tn || !tn.active) return;
+            const cat = tn.categories || {};
+            const ratio = r.units>0 ? (ub.count/r.units) : 0;
+            let tw=0, tnz=0, tz=0, ts=0, tm=0;
+            if(cat.water)    tw  = ub.w  + addW*ratio;
+            if(cat.naz)      tnz = ub.n  + addN*ratio;
+            if(cat.zab)      tz  = ub.z  + addZ*ratio;
+            if(cat.sia)      ts  = ub.s  + addS*ratio;
+            if(cat.maintFee) tm  = ub.mf + addM*ratio;
+            tw=Math.round(tw); tnz=Math.round(tnz); tz=Math.round(tz); ts=Math.round(ts); tm=Math.round(tm);
+            const tTotal = tw+tnz+tz+ts+tm;
+            if(tTotal<=0) return;
+            ow-=tw; on-=tnz; oz-=tz; os-=ts; omfx-=tm;
+            tenants.push({unitNumber:ub.u.number, unitType:ub.u.type, tenantId:tn.id, name:tn.name, phone:tn.phone, water:tw, nazafa:tnz, zabala:tz, siana:ts, maintFee:tm, total:tTotal});
+        });
+        const total = ow+on+oz+os+omfx;
         return {
             id: r.id,
             name: r.name,
-            water:    Math.round(w),
-            nazafa:   Math.round(n),
-            zabala:   Math.round(z),
-            siana:    Math.round(s),
-            maintFee: Math.round(mfx),
+            water:    ow,
+            nazafa:   on,
+            zabala:   oz,
+            siana:    os,
+            maintFee: omfx,
             total:    total,
             exemptThisMonth: false,
-            exemptNote: buildExemptNote(r)
+            exemptNote: buildExemptNote(r),
+            tenants: tenants
         };
     });
 }
@@ -2373,6 +2512,17 @@ function recalculateAll(){
             d.paidByAdvance = false;
         });
     });
+    // 2b. نفس المسح والاستعادة لحسابات المستأجرين المستقلة (لو موجودين)
+    getAllTenants().forEach(tn => {
+        tn.debts = (tn.debts || []).filter(d => !d.isMonthlyDue);
+        tn.advance = 0;
+        if(!tn.manualDebts) tn.manualDebts = [];
+        tn.manualDebts.forEach(d => {
+            if(d.originalAmount === undefined) d.originalAmount = parseFloat(d.amount) || 0;
+            d.amount = d.originalAmount;
+            d.paidByAdvance = false;
+        });
+    });
     
     // 3. Chronologically calculate distributions and add as debts
     //    شهر "مجمّد" (locked) — عادة بسبب عملية فصل وحدات — يحتفظ بتوزيعه الأصلي كما هو
@@ -2397,14 +2547,23 @@ function recalculateAll(){
                 // بالكامل من كشف الساكن، عشان يبان إن الشهر اتحسب فعلاً والسبب واضح
                 r.debts.push({amount:0, desc:`مصاريف ${MN[m.month]} ${m.year} — ${d.exemptNote}`, isMonthlyDue:true, dueMonth:m.month, dueYear:m.year, isExemptEntry:true});
             }
+            // نصيب المستأجرين (لو في وحدات مؤجّرة ضمن هذا الساكن هذا الشهر)
+            (d.tenants||[]).forEach(td => {
+                const unit = (r.units||[]).find(u => u.tenant && u.tenant.id === td.tenantId);
+                if(!unit || !unit.tenant) return;
+                if(!unit.tenant.debts) unit.tenant.debts = [];
+                if(td.total > 0){
+                    unit.tenant.debts.push({amount: td.total, desc: `مصاريف ${MN[m.month]} ${m.year}`, isMonthlyDue:true, dueMonth:m.month, dueYear:m.year});
+                }
+            });
         });
     });
     
     // *** CRITICAL: Sort debts so monthly dues (oldest first) come BEFORE manual debts ***
     // This ensures old payments correctly clear monthly dues before touching manual extra charges
-    D.sokan.forEach(r => {
-        if(!r.debts) return;
-        r.debts.sort((a, b) => {
+    function sortDebtsArr(debts){
+        if(!debts) return;
+        debts.sort((a, b) => {
             // Monthly dues come first
             if(a.isMonthlyDue && !b.isMonthlyDue) return -1;
             if(!a.isMonthlyDue && b.isMonthlyDue) return 1;
@@ -2415,11 +2574,14 @@ function recalculateAll(){
             }
             return 0; // manual debts keep their insertion order
         });
-    });
+    }
+    D.sokan.forEach(r => sortDebtsArr(r.debts));
+    getAllTenants().forEach(tn => sortDebtsArr(tn.debts));
     
     // 4. Chronologically re-process payments to safely carry over unused advances
     // Key: payments with allocationBreakdown target SPECIFIC month descs — use that first to avoid double-charging
-    D.sokan.forEach(r => {
+    // (نفس المنطق بالحرف يُطبَّق على حسابات المستأجرين المستقلة عبر getAllTenants())
+    function reapplyPayments(r){
         const originalPayments = [...(r.payments || [])];
         r.payments = []; 
         r.advance = 0;   
@@ -2507,7 +2669,9 @@ function recalculateAll(){
             }
             r.advance = rem;
         }
-    });
+    }
+    D.sokan.forEach(reapplyPayments);
+    getAllTenants().forEach(reapplyPayments);
     
     SD(D);
     rDash();
@@ -2516,10 +2680,19 @@ function recalculateAll(){
 }
 
 // ---- RESIDENT PAYMENT PROCESSING ----
-function openPay(i){
- const r=D.sokan[i];
+function openPay(i, tKey){
+ tKey = tKey || '';
+ let r;
+ if(tKey){
+     const [tri, tui] = tKey.split('_').map(Number);
+     r = D.sokan[tri] && D.sokan[tri].units[tui] && D.sokan[tri].units[tui].tenant;
+     if(!r) return T('تعذر العثور على حساب المستأجر','e');
+ } else {
+     r = D.sokan[i];
+ }
  document.getElementById('pIdx').value=i;
- document.getElementById('pName').value='الأستاذ/ '+(r.name||'—');
+ document.getElementById('pTenantKey').value=tKey;
+ document.getElementById('pName').value = tKey ? ('المستأجر/ '+(r.name||'—')) : ('الأستاذ/ '+(r.name||'—'));
  document.getElementById('pDue').value=Math.round(rDue(r))+' ج.م';
  document.getElementById('pAmt').value='';
  document.getElementById('pDate').value=new Date().toISOString().split('T')[0];
@@ -2653,12 +2826,21 @@ function updatePayPreview(){
 
 function savePay(){
  const idx=parseInt(document.getElementById('pIdx').value);
+ const tKey=(document.getElementById('pTenantKey')||{}).value||'';
  const date=document.getElementById('pDate').value;
  const note=document.getElementById('pNote').value.trim();
  const method=document.getElementById('pMethod').value||'نقدي';
  const evidenceLink=document.getElementById('pEvidenceLink').value.trim();
  const isManual = document.getElementById('pManualToggle').checked;
- const r=D.sokan[idx];
+ let r, tenantOwnerId=null;
+ if(tKey){
+     const [tri, tui] = tKey.split('_').map(Number);
+     r = D.sokan[tri] && D.sokan[tri].units[tui] && D.sokan[tri].units[tui].tenant;
+     if(!r) return T('تعذر العثور على حساب المستأجر','e');
+     tenantOwnerId = D.sokan[tri].id;
+ } else {
+     r = D.sokan[idx];
+ }
  
  let finalAmt = 0;
  let actNote = note;
@@ -2760,10 +2942,11 @@ function savePay(){
  D.sqLog.push({
     type:'in', 
     amount:finalAmt, 
-    desc:`تحصيل من ${r.name||''} — ${actNote} (${method})`, 
+    desc: tKey ? `تحصيل من المستأجر ${r.name||''} — ${actNote} (${method})` : `تحصيل من ${r.name||''} — ${actNote} (${method})`,
     date, 
     balAfter:D.sandouq,
     residentId: r.id,
+    ownerResidentId: tenantOwnerId,
     paymentId: payId,
     method,
     evidenceLink
@@ -2822,6 +3005,61 @@ function sendWA(i){
  window.open(`https://wa.me/${ph}?text=${encodeURIComponent(msg)}`,'_blank');
 }
 function remindAll(){const late=D.sokan.filter(r=>rDue(r)>0);if(!late.length)return T('لا يوجد أي متأخرين حالياً لإرسال تذكير لهم','e');sendWA(D.sokan.indexOf(late[0]));if(late.length>1)T(`يوجد أيضاً ${late.length-1} متأخرين آخرين بقائمة الانتظار`,'i');}
+// ---- TENANT MANAGEMENT (إدارة المستأجرين) ----
+function addTenant(ri,ui){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u) return;
+  const nameEl=document.getElementById(`tNewName_${ui}`), phoneEl=document.getElementById(`tNewPhone_${ui}`);
+  const name=((nameEl&&nameEl.value)||'').trim();
+  const phone=((phoneEl&&phoneEl.value)||'').trim();
+  if(!name) return T('يرجى كتابة اسم المستأجر','e');
+  pushUndo('تسجيل مستأجر لوحدة '+(D.sokan[ri].name||''));
+  u.tenant = {
+    id: 'ten_'+Math.random().toString(36).substr(2,9),
+    name, phone, active:true,
+    categories:{water:true,naz:true,zab:true,sia:true,maintFee:false},
+    debts:[], manualDebts:[], payments:[], advance:0,
+    createdDate: new Date().toISOString().split('T')[0]
+  };
+  SD(D);
+  openER(ri);
+  recalculateAll();
+  T('✅ تم تسجيل المستأجر — سيبدأ نصيبه من المصاريف القادمة فوراً حسب البنود المحددة','s');
+}
+function updTenantCat(ri,ui,field,val){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
+  if(!u.tenant.categories) u.tenant.categories={};
+  u.tenant.categories[field]=val;
+  SD(D);
+  recalculateAll();
+}
+function deactivateTenant(ri,ui){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
+  if(!confirm(`هل أنت متأكد من فصل المستأجر "${u.tenant.name}"؟\n📌 أي متأخرات حالية عليه ستبقى مسجلة على حسابه كسجل تاريخي فقط ولن تنتقل للمالك.\nمن الشهر القادم ستعود كل المصاريف بالكامل على المالك.`)) return;
+  pushUndo('فصل مستأجر '+u.tenant.name);
+  // تجميد الشهور الحالية بتوزيعها الصحيح (بما فيها نصيب المستأجر) قبل الفصل، فتبقى كسجل تاريخي ثابت
+  recalculateAll();
+  D.months.forEach(m=>{ m.locked = true; });
+  u.tenant.active = false;
+  SD(D);
+  recalculateAll();
+  openER(ri);
+  T('✅ تم فصل المستأجر. حسابه القديم محفوظ كسجل تاريخي، والمصاريف من الآن فصاعداً بالكامل على المالك.','s');
+}
+function sendTenantWA(ri,ui){
+  const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
+  const ph=fmtPhone(tn.phone); if(!ph) return T('رقم واتساب غير صحيح أو غير متوفر لهذا المستأجر','e');
+  const due=rDue(tn); const adv=tn.advance||0; const pm=D.payMethods||{};
+  let payLine='';
+  if(pm.instapay&&pm.instapay.on)payLine+=`\n💳 انستاباي: ${pm.instapay.val}`;
+  if(pm.vf&&pm.vf.on)payLine+=`\n📱 فودافون كاش: ${pm.vf.val}`;
+  let msg=`السلام عليكم الأستاذ/ ${tn.name||''}\n`;
+  if(due>0)msg+=`المتأخرات المطلوبة للسداد: ${Math.round(due)} ج.م${payLine}`;
+  else if(adv>0)msg+=`حسابك مسدد بالكامل ولديك رصيد مقدم (دائن) بالصندوق: ${Math.round(adv)} ج.م ✅`;
+  else msg+=`حسابك سليم تماماً ولا يوجد عليك أي متأخرات ✅`;
+  msg+=`\n\nشكراً جزيلاً لتعاونكم الطيب 🙏`;
+  window.open(`https://wa.me/${ph}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+
 
 // PAY METHODS
 function togglePM(t){
