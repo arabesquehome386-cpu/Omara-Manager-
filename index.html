@@ -1832,10 +1832,8 @@ function addUnit(){
  }
 }
 
-function openER(i){
- const r=D.sokan[i];document.getElementById('erI').value=i;document.getElementById('erN').value=r.name||'';document.getElementById('erP').value=r.phone||'';
- 
- // Per-unit exemptions: build unit rows with individual checkboxes per unit
+function renderERUnits(i){
+ const r=D.sokan[i]; if(!r) return;
  document.getElementById('erU').innerHTML=(r.units&&r.units.length)?r.units.map((u,ui)=>{
    const ex = u.exemptions || r.exemptions || {};
    return `<div class="border rounded p-2 mb-2" style="background:#f8fafc">
@@ -1860,7 +1858,7 @@ function openER(i){
          <div class="mb-2">
            <span class="text-muted small">متأخرات قديمة على المالك — اضغط على أي شهر لربطه بحساب المستأجر:</span>
            <div class="d-flex gap-2 flex-wrap mt-1">
-             ${getOwnerUnpaidMonths(i).length ? getOwnerUnpaidMonths(i).map(d=>{const linked=(u.tenant.arrearsOverrideMonths||[]).some(x=>x.month===d.dueMonth && x.year===d.dueYear);return `<span class="badge ${linked?'bg-warning text-dark':'bg-light text-dark border'}" style="cursor:pointer" onclick="toggleArrearsMonth(${i},${ui},${d.dueMonth},${d.dueYear})" title="${linked?'مربوط بالمستأجر — اضغط للرجوع للمالك':'اضغط لربطه بالمستأجر'}">${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م ${linked?'✓':''}</span>`;}).join('') : '<span class="text-muted small">لا يوجد متأخرات قديمة على المالك</span>'}
+             ${getOwnerUnpaidMonths(i,ui).length ? getOwnerUnpaidMonths(i,ui).map(d=>{const linked=(u.tenant.arrearsOverrideMonths||[]).some(x=>x.month===d.dueMonth && x.year===d.dueYear);return `<span class="badge ${linked?'bg-warning text-dark':'bg-light text-dark border'}" style="cursor:pointer" onclick="toggleArrearsMonth(${i},${ui},${d.dueMonth},${d.dueYear})" title="${linked?'مربوط بالمستأجر — اضغط للرجوع للمالك':'اضغط لربطه بالمستأجر'}">${MN[d.dueMonth]} ${d.dueYear} — ${Math.round(d.amount)} ج.م ${linked?'✓':''}</span>`;}).join('') : '<span class="text-muted small">لا يوجد متأخرات قديمة على المالك</span>'}
            </div>
          </div>
          <div class="d-flex gap-3 flex-wrap small">
@@ -1891,7 +1889,12 @@ function openER(i){
      </div>
    </div>`;
  }).join(''):'<div class="text-muted small">لا يوجد شقق مرتبطة</div>';
- new bootstrap.Modal(document.getElementById('modER')).show();
+}
+function openER(i){
+ const r=D.sokan[i]; if(!r) return;
+ document.getElementById('erI').value=i;document.getElementById('erN').value=r.name||'';document.getElementById('erP').value=r.phone||'';
+ renderERUnits(i);
+ bootstrap.Modal.getOrCreateInstance(document.getElementById('modER')).show();
 }
 
 function updUEx(ri,ui,field,val){
@@ -2484,6 +2487,11 @@ const unitBase = []; // لكل وحدة: نصيبها الأساسي قبل تو
             ow-=tw; on-=tnz; oz-=tz; os-=ts; omfx-=tm;
             tenants.push({unitNumber:ub.u.number, unitType:ub.u.type, tenantId:tn.id, name:tn.name, phone:tn.phone, water:tw, nazafa:tnz, zabala:tz, siana:ts, maintFee:tm, total:tTotal});
         });
+        const unitBreakdown = (r.unitBase||[]).map(ub=>{
+            const ratio = r.units>0 ? (ub.count/r.units) : 0;
+            const full = Math.round(ub.w+addW*ratio) + Math.round(ub.n+addN*ratio) + Math.round(ub.z+addZ*ratio) + Math.round(ub.s+addS*ratio) + Math.round(ub.mf+addM*ratio);
+            return { ui: (r.units||[]).indexOf(ub.u), total: full };
+        });
         const total = ow+on+oz+os+omfx;
         return {
             id: r.id,
@@ -2496,7 +2504,8 @@ const unitBase = []; // لكل وحدة: نصيبها الأساسي قبل تو
             total:    total,
             exemptThisMonth: false,
             exemptNote: buildExemptNote(r),
-            tenants: tenants
+            tenants: tenants,
+            unitBreakdown: unitBreakdown
         };
     });
 }
@@ -2577,7 +2586,7 @@ function recalculateAll(){
             const sepSet = new Set(m.separationExemptIds || []);
             if(sepSet.has(d.id)) return;
             if(d.total > 0){
-                r.debts.push({amount: d.total, desc: `مصاريف ${MN[m.month]} ${m.year}`, isMonthlyDue:true, dueMonth:m.month, dueYear:m.year});
+                r.debts.push({amount: d.total, desc: `مصاريف ${MN[m.month]} ${m.year}`, isMonthlyDue:true, dueMonth:m.month, dueYear:m.year, unitBreakdown: d.unitBreakdown||[]});
             } else if(d.exemptNote){
                 // الساكن معفي بالكامل هذا الشهر (أو من كل البنود المستحقة) — نسجل سطر بقيمة صفر بدل ما يختفي الشهر
                 // بالكامل من كشف الساكن، عشان يبان إن الشهر اتحسب فعلاً والسبب واضح
@@ -3060,12 +3069,18 @@ function addTenant(ri,ui){
   };
   SD(D);
   recalculateAll();
-  openER(ri);
+  renderERUnits(ri);
   T('✅ تم تسجيل المستأجر — المصاريف من دلوقتي تتقسم معاه. لو فيه متأخرات قديمة على المالك هتظهر جمب اسمه تقدر تدوس عليها لربطها به','s');
 }
-function getOwnerUnpaidMonths(ri){
+function getOwnerUnpaidMonths(ri,ui){
   const r=D.sokan[ri]; if(!r) return [];
-  return (r.debts||[]).filter(d=>d.isMonthlyDue && !d.isExemptEntry && (parseFloat(d.amount)||0)>0);
+  return (r.debts||[]).map(d=>{
+    if(!d.isMonthlyDue || d.isExemptEntry) return null;
+    const ub=(d.unitBreakdown||[]).find(x=>x.ui===ui);
+    const amt = ub ? ub.total : 0;
+    if(amt<=0) return null;
+    return { dueMonth:d.dueMonth, dueYear:d.dueYear, amount: amt };
+  }).filter(Boolean);
 }
 function toggleArrearsMonth(ri,ui,month,year){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
@@ -3075,7 +3090,7 @@ function toggleArrearsMonth(ri,ui,month,year){
   else tn.arrearsOverrideMonths.push({month,year});
   SD(D);
   recalculateAll();
-  openER(ri);
+  renderERUnits(ri);
 }
 function updTenantCat(ri,ui,field,val){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
@@ -3094,7 +3109,7 @@ function deactivateTenant(ri,ui){
   u.tenant.active = false;
   SD(D);
   recalculateAll();
-  openER(ri);
+  renderERUnits(ri);
   T('✅ تم فصل المستأجر. حسابه القديم محفوظ كسجل تاريخي، والمصاريف من الآن فصاعداً بالكامل على المالك.','s');
 }
 function addTenantPhone(ri,ui){
@@ -3105,14 +3120,14 @@ function addTenantPhone(ri,ui){
   if(!u.tenant.phones) u.tenant.phones = u.tenant.phone?[u.tenant.phone]:[];
   u.tenant.phones.push(val);
   SD(D);
-  openER(ri);
+  renderERUnits(ri);
 }
 function removeTenantPhone(ri,ui,pi){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; if(!u||!u.tenant) return;
   if(!u.tenant.phones) u.tenant.phones = u.tenant.phone?[u.tenant.phone]:[];
   u.tenant.phones.splice(pi,1);
   SD(D);
-  openER(ri);
+  renderERUnits(ri);
 }
 function sendTenantWA(ri,ui){
   const u=D.sokan[ri] && D.sokan[ri].units[ui]; const tn=u&&u.tenant; if(!tn) return;
